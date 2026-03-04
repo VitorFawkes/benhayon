@@ -25,7 +25,7 @@ const statusOptions: { value: PatientStatus | null; label: string }[] = [
 const typeOptions: { value: PatientPaymentType | null; label: string }[] = [
   { value: null, label: 'Todos' },
   { value: 'particular', label: 'Particular' },
-  { value: 'clinic', label: 'Convênio' },
+  { value: 'clinic', label: 'Clínica' },
 ]
 
 export default function PatientFilters({

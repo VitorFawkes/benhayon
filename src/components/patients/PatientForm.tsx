@@ -304,7 +304,7 @@ export default function PatientForm({
                         className="h-4 w-4 accent-primary"
                       />
                       <span className="text-sm">
-                        {type === 'particular' ? 'Particular' : 'Convênio / Clínica'}
+                        {type === 'particular' ? 'Particular' : 'Clínica'}
                       </span>
                     </label>
                   ))}

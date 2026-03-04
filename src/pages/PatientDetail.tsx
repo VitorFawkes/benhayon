@@ -209,7 +209,7 @@ export default function PatientDetail() {
                 <p className="text-sm font-medium text-foreground">
                   {patient.payment_type === 'particular'
                     ? 'Particular'
-                    : patient.clinic?.name ?? 'Convênio'}
+                    : patient.clinic?.name ?? 'Clínica'}
                 </p>
               </div>
             </div>
