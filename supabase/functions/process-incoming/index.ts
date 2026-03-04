@@ -210,9 +210,7 @@ serve(async (_req) => {
 
             // If it's a receipt, create receipt_analysis
             if (analysis.is_receipt) {
-              const threshold = aiSettings?.receipt_auto_confirm_threshold || 0.90
-
-              // Try to match invoice
+              // Try to match invoice (suggestion for manual review)
               let matchedInvoiceId = null
               if (messageLog.patient_id && analysis.amount) {
                 const { data: matchingInvoice } = await supabase
@@ -226,17 +224,13 @@ serve(async (_req) => {
 
                 if (matchingInvoice) {
                   const remaining = matchingInvoice.total_amount - matchingInvoice.amount_paid
-                  // Match if amount is within 5% tolerance
                   if (remaining > 0 && Math.abs(analysis.amount - remaining) / remaining <= 0.05) {
                     matchedInvoiceId = matchingInvoice.id
                   }
                 }
               }
 
-              const receiptStatus = analysis.confidence >= threshold && matchedInvoiceId
-                ? 'confirmed'
-                : 'pending_review'
-
+              // Always pending_review — payment confirmation is always manual
               const { data: receiptAnalysis } = await supabase
                 .from('receipt_analyses')
                 .insert({
@@ -250,53 +244,27 @@ serve(async (_req) => {
                   extracted_transaction_id: analysis.transaction_id,
                   confidence_score: analysis.confidence,
                   matched_invoice_id: matchedInvoiceId,
-                  status: receiptStatus,
+                  status: 'pending_review',
                   ai_raw_response: analysis,
                   media_url: storageUrl || '',
                 })
                 .select()
                 .single()
 
-              // Auto-confirm: create payment
-              if (receiptStatus === 'confirmed' && matchedInvoiceId && analysis.amount) {
-                await supabase.from('payments').insert({
-                  profile_id: messageLog.profile_id,
-                  patient_id: messageLog.patient_id,
-                  invoice_id: matchedInvoiceId,
-                  amount: analysis.amount,
-                  payment_date: analysis.date || new Date().toISOString().split('T')[0],
-                  payment_method: mapPaymentMethod(analysis.method),
-                  receipt_url: storageUrl,
-                  receipt_verified: true,
-                  source: 'ai_auto',
-                })
-
-                await supabase.from('alerts').insert({
-                  profile_id: messageLog.profile_id,
-                  patient_id: messageLog.patient_id,
-                  type: 'receipt_auto_confirmed',
-                  severity: 'info',
-                  title: 'Comprovante auto-confirmado',
-                  description: `Pagamento de R$ ${analysis.amount?.toFixed(2)} confirmado automaticamente.`,
-                  message_log_id: messageLog.id,
-                  receipt_analysis_id: receiptAnalysis?.id,
-                  invoice_id: matchedInvoiceId,
-                })
-              } else {
-                // Need manual review
-                await supabase.from('alerts').insert({
-                  profile_id: messageLog.profile_id,
-                  patient_id: messageLog.patient_id,
-                  type: 'receipt_review',
-                  severity: 'warning',
-                  title: 'Comprovante para revisão',
-                  description: analysis.confidence < threshold
-                    ? `Confiança da IA: ${Math.round(analysis.confidence * 100)}%. Revisão manual necessária.`
-                    : 'Comprovante recebido sem fatura correspondente.',
-                  message_log_id: messageLog.id,
-                  receipt_analysis_id: receiptAnalysis?.id,
-                })
-              }
+              // Alert psychologist for manual review
+              const amountStr = analysis.amount ? `R$ ${analysis.amount.toFixed(2)}` : 'valor não identificado'
+              await supabase.from('alerts').insert({
+                profile_id: messageLog.profile_id,
+                patient_id: messageLog.patient_id,
+                type: 'receipt_review',
+                severity: 'warning',
+                title: 'Comprovante recebido — revisão necessária',
+                description: matchedInvoiceId
+                  ? `${amountStr} — fatura correspondente encontrada. Confirme o pagamento manualmente.`
+                  : `${amountStr} — nenhuma fatura correspondente encontrada.`,
+                message_log_id: messageLog.id,
+                receipt_analysis_id: receiptAnalysis?.id,
+              })
             }
             } // end if (mediaData)
           } // end if (msgKey && instanceName)
@@ -481,13 +449,3 @@ async function downloadMediaFromEvolution(instanceName: string, messageKey: { id
   }
 }
 
-function mapPaymentMethod(method: string | null): string {
-  if (!method) return 'other'
-  const lower = method.toLowerCase()
-  if (lower.includes('pix')) return 'pix'
-  if (lower.includes('ted') || lower.includes('doc') || lower.includes('transfer')) return 'transfer'
-  if (lower.includes('boleto')) return 'other'
-  if (lower.includes('cartão') || lower.includes('cartao') || lower.includes('card')) return 'card'
-  if (lower.includes('dinheiro') || lower.includes('cash')) return 'cash'
-  return 'other'
-}

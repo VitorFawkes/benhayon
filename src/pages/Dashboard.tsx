@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   DollarSign,
   Clock,
@@ -8,11 +9,15 @@ import {
   AlertTriangle,
   TrendingUp,
   ArrowUpRight,
+  ChevronRight,
+  X,
 } from 'lucide-react'
-import { useDashboardStats, useRevenueHistory } from '@/hooks/useDashboardStats'
-import { formatCurrency, formatPercent } from '@/lib/formatters'
+import { useDashboardStats, useRevenueHistory, useDashboardDetails } from '@/hooks/useDashboardStats'
+import type { DashboardMetric } from '@/hooks/useDashboardStats'
+import { formatCurrency, formatPercent, formatPhone } from '@/lib/formatters'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const stagger = {
   hidden: { opacity: 0 },
@@ -24,9 +29,39 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 }
 
+const METRIC_LABELS: Record<DashboardMetric, string> = {
+  revenue: 'Receita do Mês',
+  pending: 'Pendente',
+  activePatients: 'Pacientes Ativos',
+  sessions: 'Sessões do Mês',
+  noShows: 'Faltas do Mês',
+}
+
+const METRIC_VALUE_LABELS: Record<DashboardMetric, string> = {
+  revenue: 'Pago',
+  pending: 'Pendente',
+  activePatients: 'Telefone',
+  sessions: 'Sessões',
+  noShows: 'Faltas',
+}
+
 export default function Dashboard() {
   const { data: stats, isLoading: loadingStats } = useDashboardStats()
   const { data: revenueHistory, isLoading: loadingHistory } = useRevenueHistory()
+  const [activeMetric, setActiveMetric] = useState<DashboardMetric | null>(null)
+  const { data: details, isLoading: loadingDetails } = useDashboardDetails(activeMetric)
+  const navigate = useNavigate()
+
+  const toggleMetric = (metric: DashboardMetric) => {
+    setActiveMetric((prev) => (prev === metric ? null : metric))
+  }
+
+  const formatDetailValue = (metric: DashboardMetric, value: string) => {
+    if (metric === 'revenue' || metric === 'pending') return formatCurrency(Number(value))
+    if (metric === 'activePatients') return formatPhone(value)
+    if (metric === 'sessions') return `${value} sessão${Number(value) > 1 ? 'es' : ''}`
+    return `${value} falta${Number(value) > 1 ? 's' : ''}`
+  }
 
   return (
     <motion.div
@@ -50,6 +85,8 @@ export default function Dashboard() {
           value={loadingStats ? null : formatCurrency(stats?.monthRevenue ?? 0)}
           color="text-success"
           bgColor="bg-success-light"
+          active={activeMetric === 'revenue'}
+          onClick={() => toggleMetric('revenue')}
         />
         <StatCard
           icon={Clock}
@@ -57,6 +94,8 @@ export default function Dashboard() {
           value={loadingStats ? null : formatCurrency(stats?.pendingAmount ?? 0)}
           color="text-warning"
           bgColor="bg-warning-light"
+          active={activeMetric === 'pending'}
+          onClick={() => toggleMetric('pending')}
         />
         <StatCard
           icon={Users}
@@ -64,6 +103,8 @@ export default function Dashboard() {
           value={loadingStats ? null : String(stats?.activePatients ?? 0)}
           color="text-primary"
           bgColor="bg-primary-light"
+          active={activeMetric === 'activePatients'}
+          onClick={() => toggleMetric('activePatients')}
         />
         <StatCard
           icon={Calendar}
@@ -71,6 +112,8 @@ export default function Dashboard() {
           value={loadingStats ? null : String(stats?.monthSessions ?? 0)}
           color="text-secondary"
           bgColor="bg-secondary-light"
+          active={activeMetric === 'sessions'}
+          onClick={() => toggleMetric('sessions')}
         />
         <StatCard
           icon={AlertTriangle}
@@ -78,8 +121,73 @@ export default function Dashboard() {
           value={loadingStats ? null : formatPercent(stats?.noShowRate ?? 0)}
           color="text-destructive"
           bgColor="bg-destructive-light"
+          active={activeMetric === 'noShows'}
+          onClick={() => toggleMetric('noShows')}
         />
       </motion.div>
+
+      {/* Detail Panel */}
+      <AnimatePresence>
+        {activeMetric && (
+          <motion.div
+            key="detail-panel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-surface border border-border rounded-xl">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                <h3 className="font-semibold text-sm text-foreground">
+                  {METRIC_LABELS[activeMetric]}
+                </h3>
+                <button
+                  onClick={() => setActiveMetric(null)}
+                  className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {loadingDetails ? (
+                <div className="p-4 space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Skeleton className="w-8 h-8 rounded-full" />
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </div>
+                  ))}
+                </div>
+              ) : details && details.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {details.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 cursor-pointer transition-colors group"
+                      onClick={() => navigate(`/patients/${p.id}`)}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                        {p.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-foreground truncate">{p.name}</span>
+                      <span className="text-sm text-muted-foreground ml-auto shrink-0">
+                        {formatDetailValue(activeMetric, p.value)}
+                      </span>
+                      <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-primary shrink-0 transition-colors" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  Nenhum dado encontrado para este mês.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -149,17 +257,25 @@ function StatCard({
   value,
   color,
   bgColor,
+  active,
+  onClick,
 }: {
   icon: React.ComponentType<{ size?: number; className?: string }>
   label: string
   value: string | null
   color: string
   bgColor: string
+  active?: boolean
+  onClick?: () => void
 }) {
   return (
     <motion.div
       variants={fadeUp}
-      className="bg-surface border border-border rounded-xl p-5 shadow-soft"
+      className={cn(
+        'bg-surface border rounded-xl p-5 shadow-soft cursor-pointer transition-all hover:shadow-elevated',
+        active ? 'border-primary ring-1 ring-primary/20' : 'border-border',
+      )}
+      onClick={onClick}
     >
       <div className="flex items-center gap-3 mb-3">
         <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', bgColor)}>

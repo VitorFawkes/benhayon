@@ -30,7 +30,7 @@ serve(async () => {
         await generatePaymentReminders(settings)
       }
 
-      // ─── THANK YOU: Send thank you for auto-confirmed receipts ───
+      // ─── THANK YOU: Send thank you for manually confirmed receipts ───
       if (settings.thank_you_enabled) {
         await sendThankYouMessages(settings)
       }
@@ -258,7 +258,7 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
 async function sendThankYouMessages(settings: Record<string, unknown>) {
   const profileId = settings.profile_id as string
 
-  // Find recent auto-confirmed receipts that haven't had a thank you sent
+  // Find recent manually confirmed receipts that haven't had a thank you sent
   const { data: confirmedReceipts } = await supabase
     .from('receipt_analyses')
     .select('*, patient:patients(id, full_name, phone)')

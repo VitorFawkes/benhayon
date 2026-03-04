@@ -103,7 +103,7 @@ serve(async (req) => {
 
         if (!inst) continue
 
-        // Find patient by phone number
+        // Find patient by phone number — only save messages from known patients
         const normalizedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`
         const { data: patient } = await supabase
           .from('patients')
@@ -113,12 +113,18 @@ serve(async (req) => {
           .is('deleted_at', null)
           .maybeSingle()
 
+        // Skip messages from unknown numbers (not a patient)
+        if (!patient) {
+          console.log(`Ignoring message from unknown number: ${normalizedPhone}`)
+          continue
+        }
+
         // Insert message log (with deduplication)
         const { data: messageLog, error: logError } = await supabase
           .from('message_logs')
           .upsert({
             profile_id: inst.profile_id,
-            patient_id: patient?.id || null,
+            patient_id: patient.id,
             direction: 'inbound',
             message_type: messageType,
             content: content || null,

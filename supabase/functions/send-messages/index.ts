@@ -56,6 +56,22 @@ serve(async () => {
           continue
         }
 
+        // For billing/reminder messages, re-check if invoice is still unpaid
+        if (msg.invoice_id && (msg.message_type === 'billing' || msg.message_type === 'reminder')) {
+          const { data: invoice } = await supabase
+            .from('invoices')
+            .select('status')
+            .eq('id', msg.invoice_id)
+            .single()
+
+          if (invoice?.status === 'paid') {
+            await supabase.from('message_queue')
+              .update({ status: 'cancelled', last_error: 'Fatura já foi paga' })
+              .eq('id', msg.id)
+            continue
+          }
+        }
+
         // Get AI settings for rate limiting
         const { data: aiSettings } = await supabase
           .from('ai_settings')
