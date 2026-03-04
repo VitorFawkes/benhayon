@@ -3,7 +3,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!
 const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL')!
 const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY')!
@@ -11,7 +10,7 @@ const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY')!
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // ─── Intent Classification Prompt ───
-const INTENT_PROMPT = `Você é um sistema de classificação para consultório de psicologia.
+const INTENT_SYSTEM_PROMPT = `Você é um sistema de classificação para consultório de psicologia.
 Classifique a mensagem do paciente em UMA das categorias:
 
 - payment_claimed: Paciente diz que pagou ("já fiz o pix", "transferi", "paguei", "mandei")
@@ -23,7 +22,8 @@ Classifique a mensagem do paciente em UMA das categorias:
 Responda APENAS em JSON: {"intent":"...", "confidence":0.00, "summary":"..."}`
 
 // ─── Receipt Analysis Prompt ───
-const RECEIPT_PROMPT = `Analise esta imagem. É um comprovante de pagamento brasileiro?
+const RECEIPT_SYSTEM_PROMPT = `Você é um especialista em análise de comprovantes de pagamento brasileiros.
+Analise a imagem enviada e determine se é um comprovante de pagamento.
 
 Se SIM, extraia:
 - amount: valor em R$ (número decimal)
@@ -32,10 +32,10 @@ Se SIM, extraia:
 - payer: nome do pagador se visível
 - transaction_id: ID da transação se visível
 
-Responda APENAS JSON:
+Responda APENAS em JSON:
 {"is_receipt":true/false,"amount":null,"date":null,"method":null,"payer":null,"transaction_id":null,"confidence":0.00,"notes":"observações"}`
 
-serve(async (req) => {
+serve(async (_req) => {
   try {
     // Fetch pending items from processing queue (limit 5 per execution)
     const { data: queueItems, error: queueError } = await supabase
@@ -108,7 +108,6 @@ serve(async (req) => {
 
         // ─── Process AUDIO ───
         if (messageType === 'audio' && aiSettings?.analyze_audio) {
-          // Download audio from Evolution API
           const rawPayload = messageLog.raw_payload as Record<string, unknown>
           const audioUrl = extractMediaUrl(rawPayload)
 
@@ -116,7 +115,7 @@ serve(async (req) => {
             // Transcribe with Whisper
             const transcription = await transcribeAudio(audioUrl)
 
-            // Then classify intent
+            // Then classify intent with GPT-5.1
             const intent = await classifyIntent(transcription)
 
             await supabase
@@ -170,7 +169,7 @@ serve(async (req) => {
               ? `${SUPABASE_URL}/storage/v1/object/public/receipts/${storagePath}`
               : null
 
-            // Analyze with Claude Vision
+            // Analyze with GPT-5.1 Vision
             const analysis = await analyzeReceipt(mediaUrl)
 
             // Update message log
@@ -204,7 +203,7 @@ serve(async (req) => {
                 if (matchingInvoice) {
                   const remaining = matchingInvoice.total_amount - matchingInvoice.amount_paid
                   // Match if amount is within 5% tolerance
-                  if (Math.abs(analysis.amount - remaining) / remaining <= 0.05) {
+                  if (remaining > 0 && Math.abs(analysis.amount - remaining) / remaining <= 0.05) {
                     matchedInvoiceId = matchingInvoice.id
                   }
                 }
@@ -307,26 +306,30 @@ serve(async (req) => {
 
 // ─── Helper Functions ───
 
+/**
+ * Classifica a intenção de uma mensagem de texto usando GPT-5.1
+ */
 async function classifyIntent(text: string): Promise<{ intent: string; confidence: number; summary: string }> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'gpt-5.1',
       max_tokens: 256,
-      messages: [{
-        role: 'user',
-        content: `${INTENT_PROMPT}\n\nMensagem do paciente: "${text}"`,
-      }],
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: INTENT_SYSTEM_PROMPT },
+        { role: 'user', content: `Mensagem do paciente: "${text}"` },
+      ],
     }),
   })
 
   const data = await response.json()
-  const content = data.content?.[0]?.text || '{}'
+  const content = data.choices?.[0]?.message?.content || '{}'
 
   try {
     return JSON.parse(content)
@@ -335,12 +338,13 @@ async function classifyIntent(text: string): Promise<{ intent: string; confidenc
   }
 }
 
+/**
+ * Transcreve áudio usando OpenAI Whisper
+ */
 async function transcribeAudio(audioUrl: string): Promise<string> {
-  // Download audio
   const audioResponse = await fetch(audioUrl)
   const audioBlob = await audioResponse.blob()
 
-  // Send to Whisper
   const formData = new FormData()
   formData.append('file', audioBlob, 'audio.ogg')
   formData.append('model', 'whisper-1')
@@ -356,6 +360,9 @@ async function transcribeAudio(audioUrl: string): Promise<string> {
   return data.text || ''
 }
 
+/**
+ * Analisa imagem de comprovante usando GPT-5.1 Vision
+ */
 async function analyzeReceipt(imageUrl: string): Promise<{
   is_receipt: boolean
   amount: number | null
@@ -377,31 +384,35 @@ async function analyzeReceipt(imageUrl: string): Promise<{
   const base64 = btoa(binary)
   const mediaType = imageResponse.headers.get('content-type') || 'image/jpeg'
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'gpt-5.1',
       max_tokens: 512,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64 },
-          },
-          { type: 'text', text: RECEIPT_PROMPT },
-        ],
-      }],
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: RECEIPT_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mediaType};base64,${base64}` },
+            },
+            { type: 'text', text: 'Analise este comprovante de pagamento.' },
+          ],
+        },
+      ],
     }),
   })
 
   const data = await response.json()
-  const content = data.content?.[0]?.text || '{}'
+  const content = data.choices?.[0]?.message?.content || '{}'
 
   try {
     return JSON.parse(content)
@@ -411,7 +422,6 @@ async function analyzeReceipt(imageUrl: string): Promise<{
 }
 
 function extractMediaUrl(payload: Record<string, unknown>): string | null {
-  // Try various payload formats from Evolution API
   const data = payload.data as Record<string, unknown> | undefined
   if (data?.media?.url) return data.media.url as string
   if (data?.message?.mediaUrl) return data.message.mediaUrl as string
