@@ -158,61 +158,59 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
 async function generatePaymentReminders(settings: Record<string, unknown>) {
   const profileId = settings.profile_id as string
   const today = new Date()
+  const todayDay = today.getDate()
 
-  // Get overdue invoices
-  const { data: overdueInvoices } = await supabase
+  const reminderDay = (settings.reminder_day as number) || 10
+  const maxCount = (settings.reminder_max_count as number) || 3
+  const repeatEnabled = settings.reminder_repeat_enabled as boolean
+  const repeatInterval = (settings.reminder_repeat_interval_days as number) || 5
+  const template = (settings.reminder_1_template as string) || ''
+
+  // Only start reminding from reminder_day onwards
+  if (todayDay < reminderDay) return
+
+  // Get unpaid invoices
+  const { data: unpaidInvoices } = await supabase
     .from('invoices')
     .select('*, patient:patients(id, full_name, phone)')
     .eq('profile_id', profileId)
     .in('status', ['pending', 'partial', 'overdue'])
-    .lt('due_date', today.toISOString().split('T')[0])
 
-  if (!overdueInvoices) return
+  if (!unpaidInvoices) return
 
-  for (const invoice of overdueInvoices) {
-    const dueDate = new Date(invoice.due_date)
-    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+  for (const invoice of unpaidInvoices) {
     const patient = invoice.patient as Record<string, unknown>
     const remaining = invoice.total_amount - invoice.amount_paid
 
-    // Count how many reminders already sent for this invoice
-    const { count: remindersSent } = await supabase
+    // Get reminders already sent for this invoice (most recent first)
+    const { data: sentReminders } = await supabase
       .from('message_queue')
-      .select('*', { count: 'exact', head: true })
+      .select('created_at')
       .eq('invoice_id', invoice.id)
       .eq('message_type', 'reminder')
       .in('status', ['sent', 'queued', 'sending'])
+      .order('created_at', { ascending: false })
 
-    const sentCount = remindersSent || 0
+    const sentCount = sentReminders?.length || 0
 
-    // Determine escalation level
-    let template = ''
-    let tone = ''
+    // Already reached max reminders
+    if (sentCount >= maxCount) continue
+
     let shouldSend = false
 
-    const r1Days = (settings.reminder_1_days as number) || 3
-    const r2Days = (settings.reminder_2_days as number) || 7
-    const r3Days = (settings.reminder_3_days as number) || 14
-    const r2Enabled = settings.reminder_2_enabled as boolean
-    const r3Enabled = settings.reminder_3_enabled as boolean
-
-    if (daysOverdue >= r3Days && r3Enabled && sentCount < 3) {
-      template = settings.reminder_3_template as string
-      tone = settings.reminder_3_tone as string
+    if (sentCount === 0) {
+      // First reminder: send on reminder_day
       shouldSend = true
-    } else if (daysOverdue >= r2Days && r2Enabled && sentCount < 2) {
-      template = settings.reminder_2_template as string
-      tone = settings.reminder_2_tone as string
-      shouldSend = true
-    } else if (daysOverdue >= r1Days && sentCount < 1) {
-      template = settings.reminder_1_template as string
-      tone = settings.reminder_1_tone as string
-      shouldSend = true
+    } else if (repeatEnabled && sentReminders?.[0]) {
+      // Check interval since last reminder
+      const lastSent = new Date(sentReminders[0].created_at)
+      const daysSinceLast = Math.floor((today.getTime() - lastSent.getTime()) / (1000 * 60 * 60 * 24))
+      shouldSend = daysSinceLast >= repeatInterval
     }
 
     if (!shouldSend || !template) continue
 
-    // Check if AI is enabled for this patient before sending reminder
+    // Check if AI is enabled for this patient
     const { data: patientAICheck } = await supabase
       .from('patients')
       .select('ai_enabled')
@@ -227,8 +225,6 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
       valor: remaining.toFixed(2),
       mes: monthName,
       vencimento: new Date(invoice.due_date).toLocaleDateString('pt-BR'),
-      dias_atraso: String(daysOverdue),
-      prazo_final: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR'),
     })
 
     const sendHour = (settings.send_start_hour as number) || 9
@@ -245,8 +241,9 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
       escalation_level: sentCount + 1,
     })
 
-    // Update invoice status to overdue if still pending
-    if (invoice.status === 'pending') {
+    // Update invoice status to overdue if past due date
+    const dueDate = new Date(invoice.due_date)
+    if (invoice.status === 'pending' && today > dueDate) {
       await supabase
         .from('invoices')
         .update({ status: 'overdue' })

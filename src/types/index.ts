@@ -207,6 +207,7 @@ export interface AISettings {
   billing_tone: AITone
   billing_template: string
   reminder_enabled: boolean
+  reminder_day: number
   reminder_1_days: number
   reminder_1_tone: AITone
   reminder_1_template: string
@@ -218,6 +219,9 @@ export interface AISettings {
   reminder_3_enabled: boolean
   reminder_3_tone: AITone
   reminder_3_template: string
+  reminder_repeat_enabled: boolean
+  reminder_repeat_interval_days: number
+  reminder_max_count: number
   thank_you_enabled: boolean
   thank_you_tone: AITone
   thank_you_template: string

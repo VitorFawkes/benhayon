@@ -33,7 +33,13 @@ export default function AISettings() {
   const [expandedSection, setExpandedSection] = useState<string | null>('billing')
 
   useEffect(() => {
-    if (settings) setLocal(settings)
+    if (settings) setLocal({
+      ...settings,
+      reminder_day: settings.reminder_day ?? 10,
+      reminder_repeat_enabled: settings.reminder_repeat_enabled ?? false,
+      reminder_repeat_interval_days: settings.reminder_repeat_interval_days ?? 5,
+      reminder_max_count: settings.reminder_max_count ?? 3,
+    })
   }, [settings])
 
   if (isLoading || !local) {
@@ -143,77 +149,56 @@ export default function AISettings() {
         enabled={local.reminder_enabled}
         onEnabledChange={(v) => update('reminder_enabled', v)}
       >
-        {/* Reminder Level 1 */}
-        <div className="mb-6">
-          <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-warning/20 text-warning flex items-center justify-center text-xs font-bold">1</span>
-            Primeiro lembrete
-          </h4>
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-foreground mb-1.5">Dias após vencimento</label>
-            <input
-              type="number"
-              min={1}
-              value={local.reminder_1_days}
-              onChange={(e) => update('reminder_1_days', safeParseInt(e.target.value, local.reminder_1_days))}
-              className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
-            />
-          </div>
-          <ToneSelector value={local.reminder_1_tone} onChange={(v) => update('reminder_1_tone', v)} />
-          <TemplateEditor label="Mensagem" value={local.reminder_1_template} onChange={(v) => update('reminder_1_template', v)} />
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-foreground mb-1.5">Dia do lembrete</label>
+          <input
+            type="number"
+            min={1}
+            max={28}
+            value={local.reminder_day}
+            onChange={(e) => update('reminder_day', safeParseInt(e.target.value, local.reminder_day))}
+            className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Dia do mês para enviar o primeiro lembrete</p>
         </div>
 
-        {/* Reminder Level 2 */}
-        <div className="mb-6 pt-4 border-t border-border">
+        <ToneSelector value={local.reminder_1_tone} onChange={(v) => update('reminder_1_tone', v)} />
+        <TemplateEditor label="Mensagem do lembrete" value={local.reminder_1_template} onChange={(v) => update('reminder_1_template', v)} />
+
+        {/* Repeat settings */}
+        <div className="mt-6 pt-4 border-t border-border">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-warning/40 text-warning flex items-center justify-center text-xs font-bold">2</span>
-              Segundo lembrete
-            </h4>
-            <Toggle checked={local.reminder_2_enabled} onChange={(v) => update('reminder_2_enabled', v)} />
+            <h4 className="text-sm font-semibold text-foreground">Repetição</h4>
+            <Toggle checked={local.reminder_repeat_enabled} onChange={(v) => update('reminder_repeat_enabled', v)} />
           </div>
-          {local.reminder_2_enabled && (
-            <>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-foreground mb-1.5">Dias após vencimento</label>
+          {local.reminder_repeat_enabled && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Repetir a cada</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={local.reminder_repeat_interval_days}
+                    onChange={(e) => update('reminder_repeat_interval_days', safeParseInt(e.target.value, local.reminder_repeat_interval_days))}
+                    className="w-20 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+                  />
+                  <span className="text-sm text-muted-foreground">dias</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Máximo de lembretes</label>
                 <input
                   type="number"
                   min={1}
-                  value={local.reminder_2_days}
-                  onChange={(e) => update('reminder_2_days', safeParseInt(e.target.value, local.reminder_2_days))}
-                  className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+                  max={10}
+                  value={local.reminder_max_count}
+                  onChange={(e) => update('reminder_max_count', safeParseInt(e.target.value, local.reminder_max_count))}
+                  className="w-20 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                 />
               </div>
-              <ToneSelector value={local.reminder_2_tone} onChange={(v) => update('reminder_2_tone', v)} />
-              <TemplateEditor label="Mensagem" value={local.reminder_2_template} onChange={(v) => update('reminder_2_template', v)} />
-            </>
-          )}
-        </div>
-
-        {/* Reminder Level 3 */}
-        <div className="pt-4 border-t border-border">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-destructive/30 text-destructive flex items-center justify-center text-xs font-bold">3</span>
-              Terceiro lembrete (final)
-            </h4>
-            <Toggle checked={local.reminder_3_enabled} onChange={(v) => update('reminder_3_enabled', v)} />
-          </div>
-          {local.reminder_3_enabled && (
-            <>
-              <div className="mb-3">
-                <label className="block text-sm font-medium text-foreground mb-1.5">Dias após vencimento</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={local.reminder_3_days}
-                  onChange={(e) => update('reminder_3_days', safeParseInt(e.target.value, local.reminder_3_days))}
-                  className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
-                />
-              </div>
-              <ToneSelector value={local.reminder_3_tone} onChange={(v) => update('reminder_3_tone', v)} />
-              <TemplateEditor label="Mensagem" value={local.reminder_3_template} onChange={(v) => update('reminder_3_template', v)} />
-            </>
+            </div>
           )}
         </div>
       </Section>

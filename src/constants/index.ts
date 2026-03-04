@@ -89,7 +89,5 @@ export const TEMPLATE_VARIABLES = [
   { key: '{vencimento}', label: 'Data de vencimento' },
   { key: '{data}', label: 'Data da sessão' },
   { key: '{horario}', label: 'Horário da sessão' },
-  { key: '{dias_atraso}', label: 'Dias de atraso' },
-  { key: '{prazo_final}', label: 'Prazo final' },
   { key: '{clinica}', label: 'Nome da clínica' },
 ]
