@@ -109,11 +109,13 @@ serve(async (_req) => {
         // ─── Process AUDIO ───
         if (messageType === 'audio' && aiSettings?.analyze_audio) {
           const rawPayload = messageLog.raw_payload as Record<string, unknown>
-          const audioUrl = extractMediaUrl(rawPayload)
+          const instanceName = (rawPayload.instance as string) || ''
+          const msgKey = extractMessageKey(rawPayload)
 
-          if (audioUrl) {
+          if (msgKey && instanceName) {
+            const mediaData = await downloadMediaFromEvolution(instanceName, msgKey)
             // Transcribe with Whisper
-            const transcription = await transcribeAudio(audioUrl)
+            const transcription = mediaData ? await transcribeAudioFromBase64(mediaData.base64, mediaData.mimetype) : ''
 
             // Then classify intent with GPT-5.1
             const intent = await classifyIntent(transcription)
@@ -152,25 +154,31 @@ serve(async (_req) => {
         // ─── Process IMAGE/DOCUMENT ───
         if ((messageType === 'image' || messageType === 'document') && aiSettings?.analyze_receipts) {
           const rawPayload = messageLog.raw_payload as Record<string, unknown>
-          const mediaUrl = extractMediaUrl(rawPayload)
+          const instanceName = (rawPayload.instance as string) || ''
+          const msgKey = extractMessageKey(rawPayload)
 
-          if (mediaUrl) {
-            // Download and upload to Supabase Storage
-            const mediaResponse = await fetch(mediaUrl)
-            const mediaBlob = await mediaResponse.blob()
-            const ext = messageType === 'image' ? 'jpg' : 'pdf'
-            const storagePath = `${messageLog.profile_id}/${messageLog.patient_id || 'unknown'}/${Date.now()}.${ext}`
+          if (msgKey && instanceName) {
+            // Download media via Evolution API
+            const mediaData = await downloadMediaFromEvolution(instanceName, msgKey)
 
-            const { data: uploadData } = await supabase.storage
-              .from('receipts')
-              .upload(storagePath, mediaBlob, { contentType: mediaBlob.type })
+            if (mediaData) {
+              // Upload to Supabase Storage
+              const ext = mediaData.mimetype.includes('pdf') ? 'pdf' : 'jpg'
+              const storagePath = `${messageLog.profile_id}/${messageLog.patient_id || 'unknown'}/${Date.now()}.${ext}`
+              const binaryStr = atob(mediaData.base64)
+              const bytes = new Uint8Array(binaryStr.length)
+              for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
 
-            const storageUrl = uploadData
-              ? `${SUPABASE_URL}/storage/v1/object/public/receipts/${storagePath}`
-              : null
+              const { data: uploadData } = await supabase.storage
+                .from('receipts')
+                .upload(storagePath, bytes, { contentType: mediaData.mimetype })
 
-            // Analyze with GPT-5.1 Vision
-            const analysis = await analyzeReceipt(mediaUrl)
+              const storageUrl = uploadData
+                ? `${SUPABASE_URL}/storage/v1/object/public/receipts/${storagePath}`
+                : null
+
+              // Analyze with GPT-5.1 Vision (already have base64)
+              const analysis = await analyzeReceiptFromBase64(mediaData.base64, mediaData.mimetype)
 
             // Update message log
             await supabase
@@ -274,8 +282,9 @@ serve(async (_req) => {
                 })
               }
             }
-          }
-        }
+            } // end if (mediaData)
+          } // end if (msgKey && instanceName)
+        } // end if IMAGE/DOCUMENT
 
         // Mark as completed
         await supabase
@@ -339,14 +348,18 @@ async function classifyIntent(text: string): Promise<{ intent: string; confidenc
 }
 
 /**
- * Transcreve áudio usando OpenAI Whisper
+ * Transcreve áudio de base64 usando OpenAI Whisper
  */
-async function transcribeAudio(audioUrl: string): Promise<string> {
-  const audioResponse = await fetch(audioUrl)
-  const audioBlob = await audioResponse.blob()
+async function transcribeAudioFromBase64(base64: string, mimetype: string): Promise<string> {
+  const binaryStr = atob(base64)
+  const bytes = new Uint8Array(binaryStr.length)
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+
+  const ext = mimetype.includes('ogg') ? 'ogg' : mimetype.includes('mp4') ? 'mp4' : 'ogg'
+  const blob = new Blob([bytes], { type: mimetype })
 
   const formData = new FormData()
-  formData.append('file', audioBlob, 'audio.ogg')
+  formData.append('file', blob, `audio.${ext}`)
   formData.append('model', 'whisper-1')
   formData.append('language', 'pt')
 
@@ -361,9 +374,9 @@ async function transcribeAudio(audioUrl: string): Promise<string> {
 }
 
 /**
- * Analisa imagem de comprovante usando GPT-5.1 Vision
+ * Analisa imagem de comprovante usando GPT-5.1 Vision (recebe base64 diretamente)
  */
-async function analyzeReceipt(imageUrl: string): Promise<{
+async function analyzeReceiptFromBase64(base64: string, mediaType: string): Promise<{
   is_receipt: boolean
   amount: number | null
   date: string | null
@@ -373,17 +386,6 @@ async function analyzeReceipt(imageUrl: string): Promise<{
   confidence: number
   notes: string
 }> {
-  // Download image as base64
-  const imageResponse = await fetch(imageUrl)
-  const imageBuffer = await imageResponse.arrayBuffer()
-  const bytes = new Uint8Array(imageBuffer)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  const base64 = btoa(binary)
-  const mediaType = imageResponse.headers.get('content-type') || 'image/jpeg'
-
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -421,12 +423,46 @@ async function analyzeReceipt(imageUrl: string): Promise<{
   }
 }
 
-function extractMediaUrl(payload: Record<string, unknown>): string | null {
+function extractMessageKey(payload: Record<string, unknown>): { id: string; remoteJid: string } | null {
   const data = payload.data as Record<string, unknown> | undefined
-  if (data?.media?.url) return data.media.url as string
-  if (data?.message?.mediaUrl) return data.message.mediaUrl as string
-  if ((payload as Record<string, unknown>).mediaUrl) return (payload as Record<string, unknown>).mediaUrl as string
+  const key = data?.key as Record<string, unknown> | undefined
+  if (key?.id && key?.remoteJid) {
+    return { id: key.id as string, remoteJid: key.remoteJid as string }
+  }
   return null
+}
+
+async function downloadMediaFromEvolution(instanceName: string, messageKey: { id: string; remoteJid: string }): Promise<{ base64: string; mimetype: string } | null> {
+  try {
+    const response = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: {
+          key: {
+            id: messageKey.id,
+            remoteJid: messageKey.remoteJid,
+            fromMe: false,
+          },
+        },
+        convertToMp4: false,
+      }),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+    if (data.base64 && data.mimetype) {
+      return { base64: data.base64 as string, mimetype: data.mimetype as string }
+    }
+    return null
+  } catch (error) {
+    console.error('Error downloading media:', error)
+    return null
+  }
 }
 
 function mapPaymentMethod(method: string | null): string {
