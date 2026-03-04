@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -125,6 +125,25 @@ export default function PatientForm({
       notes: patient?.notes ?? '',
     },
   })
+
+  // Reset form when dialog opens or patient changes
+  useEffect(() => {
+    if (open) {
+      reset({
+        full_name: patient?.full_name ?? '',
+        phone: patient?.phone ?? '+55',
+        email: patient?.email ?? '',
+        session_value: patient?.session_value ?? 0,
+        payment_type: patient?.payment_type ?? 'particular',
+        clinic_id: patient?.clinic_id ?? null,
+        status: patient?.status ?? 'active',
+        notes: patient?.notes ?? '',
+      })
+      setCurrencyDisplay(
+        patient ? formatCurrencyInput(String(Math.round(patient.session_value * 100))) : ''
+      )
+    }
+  }, [open, patient, reset])
 
   const paymentType = watch('payment_type')
 

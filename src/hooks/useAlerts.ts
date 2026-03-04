@@ -13,6 +13,7 @@ export function useAlerts() {
       const { data, error } = await supabase
         .from('alerts')
         .select('*, patient:patients(id, full_name, phone)')
+        .eq('profile_id', user!.id)
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -32,6 +33,7 @@ export function useUnreadAlertCount() {
       const { count, error } = await supabase
         .from('alerts')
         .select('*', { count: 'exact', head: true })
+        .eq('profile_id', user!.id)
         .eq('is_read', false)
         .is('resolved_at', null)
 

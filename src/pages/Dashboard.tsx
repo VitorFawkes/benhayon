@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   DollarSign,
@@ -185,8 +186,8 @@ function QuickAction({
   icon: React.ComponentType<{ size?: number; className?: string }>
 }) {
   return (
-    <a
-      href={href}
+    <Link
+      to={href}
       className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors group"
     >
       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -194,6 +195,6 @@ function QuickAction({
       </div>
       <span className="text-sm font-medium text-foreground">{label}</span>
       <ArrowUpRight size={14} className="text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-    </a>
+    </Link>
   )
 }

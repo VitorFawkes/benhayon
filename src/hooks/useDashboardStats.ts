@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 export function useDashboardStats() {
   const { user } = useAuth()
@@ -102,7 +103,7 @@ export function useRevenueHistory() {
         const paid = paymentsRes.data?.reduce((s, p) => s + Number(p.amount), 0) || 0
 
         months.push({
-          month: format(date, 'MMM', { locale: undefined }),
+          month: format(date, 'MMM', { locale: ptBR }),
           invoiced,
           paid,
           pending: invoiced - paid,

@@ -97,7 +97,7 @@ export function useInvoicePreview(month: Date | null) {
       // Buscar consultas realizadas no mês
       const { data: appointments, error: appError } = await supabase
         .from('appointments')
-        .select('patient_id, patients(id, full_name, session_value)')
+        .select('patient_id, patient:patients(id, full_name, session_value)')
         .eq('status', 'completed')
         .gte('date', monthStart)
         .lte('date', monthEnd)
@@ -138,7 +138,7 @@ export function useInvoicePreview(month: Date | null) {
       const grouped = new Map<string, InvoicePreviewItem>()
 
       for (const apt of appointments || []) {
-        const patient = apt.patients as unknown as { id: string; full_name: string; session_value: number }
+        const patient = apt.patient as unknown as { id: string; full_name: string; session_value: number }
         if (!patient) continue
 
         const existing = grouped.get(apt.patient_id)

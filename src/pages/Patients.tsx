@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -17,17 +17,17 @@ export default function Patients() {
   const [typeFilter, setTypeFilter] = useState<PatientPaymentType | null>(null)
 
   // Debounce search
-  const debounceTimerRef = useState<ReturnType<typeof setTimeout> | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearch(value)
-      if (debounceTimerRef[0]) clearTimeout(debounceTimerRef[0])
-      debounceTimerRef[0] = setTimeout(() => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = setTimeout(() => {
         setDebouncedSearch(value)
       }, 300)
     },
-    [debounceTimerRef]
+    []
   )
 
   const { data: patients, isLoading } = usePatients({

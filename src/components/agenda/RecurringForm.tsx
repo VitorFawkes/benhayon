@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format, addMinutes, addWeeks, parse } from 'date-fns'
+import { format, addMinutes, addWeeks, addDays, parse } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 
@@ -90,6 +90,7 @@ export function RecurringForm({ open, onOpenChange }: RecurringFormProps) {
   const frequency = watch('frequency')
   const startsAt = watch('starts_at')
   const endsAt = watch('ends_at')
+  const dayOfWeek = watch('day_of_week')
 
   // Auto-set end_time when start_time changes
   useEffect(() => {
@@ -125,13 +126,19 @@ export function RecurringForm({ open, onOpenChange }: RecurringFormProps) {
     if (!startsAt) return null
 
     const stepWeeks = frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4
-    const start = new Date(startsAt)
+
+    // Adjust start date to the target day_of_week (same logic as useRecurringSchedules)
+    let current = new Date(startsAt)
+    while (current.getDay() !== dayOfWeek) {
+      current = addDays(current, 1)
+    }
+
     const totalWeeks = 8
     let count = 0
-    let lastDate = start
+    let lastDate = current
 
     for (let i = 0; i < totalWeeks; i++) {
-      const date = addWeeks(start, i * stepWeeks)
+      const date = addWeeks(current, i * stepWeeks)
       if (endsAt && date > new Date(endsAt)) break
       count++
       lastDate = date
@@ -141,7 +148,7 @@ export function RecurringForm({ open, onOpenChange }: RecurringFormProps) {
       count,
       lastDate: format(lastDate, "dd/MM/yyyy", { locale: ptBR }),
     }
-  }, [frequency, startsAt, endsAt])
+  }, [frequency, startsAt, endsAt, dayOfWeek])
 
   async function onSubmit(data: RecurringFormData) {
     try {

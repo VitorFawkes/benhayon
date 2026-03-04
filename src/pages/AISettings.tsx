@@ -21,6 +21,11 @@ import { AI_TONE_LABELS, AI_TONE_DESCRIPTIONS, TEMPLATE_VARIABLES } from '@/cons
 import type { AITone } from '@/types'
 import { cn } from '@/lib/utils'
 
+function safeParseInt(val: string, fallback: number): number {
+  const parsed = parseInt(val)
+  return isNaN(parsed) ? fallback : parsed
+}
+
 export default function AISettings() {
   const { data: settings, isLoading } = useAISettings()
   const updateSettings = useUpdateAISettings()
@@ -103,7 +108,7 @@ export default function AISettings() {
               min={1}
               max={28}
               value={local.billing_day}
-              onChange={(e) => update('billing_day', parseInt(e.target.value))}
+              onChange={(e) => update('billing_day', safeParseInt(e.target.value, local.billing_day))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
             <p className="text-xs text-muted-foreground mt-1">Dia do mês para gerar cobranças</p>
@@ -115,7 +120,7 @@ export default function AISettings() {
               min={1}
               max={30}
               value={local.billing_due_days}
-              onChange={(e) => update('billing_due_days', parseInt(e.target.value))}
+              onChange={(e) => update('billing_due_days', safeParseInt(e.target.value, local.billing_due_days))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
             <p className="text-xs text-muted-foreground mt-1">Dias após envio para vencer</p>
@@ -150,7 +155,7 @@ export default function AISettings() {
               type="number"
               min={1}
               value={local.reminder_1_days}
-              onChange={(e) => update('reminder_1_days', parseInt(e.target.value))}
+              onChange={(e) => update('reminder_1_days', safeParseInt(e.target.value, local.reminder_1_days))}
               className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
           </div>
@@ -175,7 +180,7 @@ export default function AISettings() {
                   type="number"
                   min={1}
                   value={local.reminder_2_days}
-                  onChange={(e) => update('reminder_2_days', parseInt(e.target.value))}
+                  onChange={(e) => update('reminder_2_days', safeParseInt(e.target.value, local.reminder_2_days))}
                   className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                 />
               </div>
@@ -202,7 +207,7 @@ export default function AISettings() {
                   type="number"
                   min={1}
                   value={local.reminder_3_days}
-                  onChange={(e) => update('reminder_3_days', parseInt(e.target.value))}
+                  onChange={(e) => update('reminder_3_days', safeParseInt(e.target.value, local.reminder_3_days))}
                   className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
                 />
               </div>
@@ -242,7 +247,7 @@ export default function AISettings() {
             min={1}
             max={72}
             value={local.appointment_reminder_hours_before}
-            onChange={(e) => update('appointment_reminder_hours_before', parseInt(e.target.value))}
+            onChange={(e) => update('appointment_reminder_hours_before', safeParseInt(e.target.value, local.appointment_reminder_hours_before))}
             className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
           />
         </div>
@@ -329,7 +334,7 @@ export default function AISettings() {
               min={0}
               max={23}
               value={local.send_start_hour}
-              onChange={(e) => update('send_start_hour', parseInt(e.target.value))}
+              onChange={(e) => update('send_start_hour', safeParseInt(e.target.value, local.send_start_hour))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
             <p className="text-xs text-muted-foreground mt-1">{local.send_start_hour}:00</p>
@@ -341,7 +346,7 @@ export default function AISettings() {
               min={0}
               max={23}
               value={local.send_end_hour}
-              onChange={(e) => update('send_end_hour', parseInt(e.target.value))}
+              onChange={(e) => update('send_end_hour', safeParseInt(e.target.value, local.send_end_hour))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
             <p className="text-xs text-muted-foreground mt-1">{local.send_end_hour}:00</p>
@@ -359,7 +364,7 @@ export default function AISettings() {
               min={3}
               max={30}
               value={local.min_seconds_between_messages}
-              onChange={(e) => update('min_seconds_between_messages', parseInt(e.target.value))}
+              onChange={(e) => update('min_seconds_between_messages', safeParseInt(e.target.value, local.min_seconds_between_messages))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
           </div>
@@ -370,7 +375,7 @@ export default function AISettings() {
               min={5}
               max={100}
               value={local.max_messages_per_hour}
-              onChange={(e) => update('max_messages_per_hour', parseInt(e.target.value))}
+              onChange={(e) => update('max_messages_per_hour', safeParseInt(e.target.value, local.max_messages_per_hour))}
               className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
             />
           </div>
