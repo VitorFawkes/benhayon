@@ -11,18 +11,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const evoHeaders = {
+  'apikey': EVOLUTION_API_KEY,
+  'Content-Type': 'application/json',
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Verify JWT
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -32,112 +35,187 @@ serve(async (req) => {
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const body = await req.json()
-    const { action, instanceName, webhookUrl } = body
+    const { action, instanceName } = body
 
-    const headers = {
-      'apikey': EVOLUTION_API_KEY,
-      'Content-Type': 'application/json',
-    }
-
-    let result: unknown
+    let result: Record<string, unknown> = {}
 
     switch (action) {
-      case 'create_instance': {
-        const resp = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
+      // ─── CREATE + CONNECT (combined) ───
+      // Creates instance with QR code, saves to DB, configures webhook
+      case 'create_and_connect': {
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`
+
+        // 1. Check if instance already exists in Evolution API
+        const checkResp = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+          headers: evoHeaders,
+        })
+        const checkData = await checkResp.json()
+
+        if (checkResp.ok && checkData?.instance?.state === 'open') {
+          // Already connected — fetch instance info and update DB
+          const infoResp = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`, {
+            headers: evoHeaders,
+          })
+          const infoData = await infoResp.json()
+          const instanceInfo = Array.isArray(infoData) ? infoData[0] : infoData
+
+          await supabase.from('whatsapp_instances').upsert({
+            profile_id: user.id,
+            instance_name: instanceName,
+            instance_id: instanceInfo?.id || null,
+            status: 'connected',
+            phone_number: instanceInfo?.ownerJid?.replace('@s.whatsapp.net', '') || null,
+            webhook_url: webhookUrl,
+          }, { onConflict: 'profile_id' })
+
+          result = { status: 'already_connected', instance: instanceInfo }
+          break
+        }
+
+        if (checkResp.ok && checkData?.instance?.state !== 'open') {
+          // Instance exists but not connected — get new QR
+          const connectResp = await fetch(`${EVOLUTION_API_URL}/instance/connect/${instanceName}`, {
+            headers: evoHeaders,
+          })
+          const connectData = await connectResp.json()
+
+          // Update DB
+          await supabase.from('whatsapp_instances').upsert({
+            profile_id: user.id,
+            instance_name: instanceName,
+            instance_id: checkData?.instance?.instanceId || null,
+            status: 'connecting',
+            webhook_url: webhookUrl,
+          }, { onConflict: 'profile_id' })
+
+          result = {
+            status: 'connecting',
+            qrcode: connectData?.base64 || connectData?.qrcode?.base64 || null,
+            pairingCode: connectData?.pairingCode || null,
+          }
+          break
+        }
+
+        // 2. Instance doesn't exist — create it with QR code + webhook
+        const createResp = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
           method: 'POST',
-          headers,
+          headers: evoHeaders,
           body: JSON.stringify({
             instanceName,
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
+            webhook: {
+              url: webhookUrl,
+              enabled: true,
+              webhookByEvents: false,
+              webhookBase64: true,
+              events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED'],
+            },
           }),
         })
-        result = await resp.json()
-        break
-      }
+        const createData = await createResp.json()
 
-      case 'connect': {
-        const resp = await fetch(`${EVOLUTION_API_URL}/instance/connect/${instanceName}`, {
-          method: 'GET',
-          headers,
-        })
-        result = await resp.json()
-        break
-      }
+        // 3. Save instance to DB
+        await supabase.from('whatsapp_instances').upsert({
+          profile_id: user.id,
+          instance_name: instanceName,
+          instance_id: createData?.instance?.instanceId || null,
+          status: 'connecting',
+          webhook_url: webhookUrl,
+        }, { onConflict: 'profile_id' })
 
-      case 'connection_state': {
-        const resp = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
-          method: 'GET',
-          headers,
-        })
-        result = await resp.json()
-
-        // If connected, update DB
-        const data = result as { state?: string; instance?: { state?: string } }
-        const state = data?.instance?.state || data?.state
-        if (state === 'open') {
-          await supabase
-            .from('whatsapp_instances')
-            .update({ status: 'connected' })
-            .eq('instance_name', instanceName)
+        result = {
+          status: 'connecting',
+          qrcode: createData?.qrcode?.base64 || null,
+          pairingCode: createData?.qrcode?.pairingCode || null,
+          instanceId: createData?.instance?.instanceId || null,
         }
         break
       }
 
+      // ─── CONNECTION STATE ───
+      case 'connection_state': {
+        const resp = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+          headers: evoHeaders,
+        })
+        const data = await resp.json()
+        const state = data?.instance?.state
+
+        // Update DB status
+        if (state === 'open') {
+          // Fetch phone number from instance info
+          const infoResp = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances?instanceName=${instanceName}`, {
+            headers: evoHeaders,
+          })
+          const infoData = await infoResp.json()
+          const instanceInfo = Array.isArray(infoData) ? infoData[0] : infoData
+          const phoneNumber = instanceInfo?.ownerJid?.replace('@s.whatsapp.net', '') || null
+
+          await supabase.from('whatsapp_instances')
+            .update({ status: 'connected', phone_number: phoneNumber })
+            .eq('instance_name', instanceName)
+
+          result = { state: 'open', phoneNumber }
+        } else if (state === 'close') {
+          await supabase.from('whatsapp_instances')
+            .update({ status: 'disconnected' })
+            .eq('instance_name', instanceName)
+          result = { state: 'close' }
+        } else {
+          result = { state: state || 'unknown' }
+        }
+        break
+      }
+
+      // ─── REFRESH QR CODE ───
+      case 'connect': {
+        const resp = await fetch(`${EVOLUTION_API_URL}/instance/connect/${instanceName}`, {
+          headers: evoHeaders,
+        })
+        const data = await resp.json()
+        result = {
+          qrcode: data?.base64 || data?.qrcode?.base64 || null,
+          pairingCode: data?.pairingCode || null,
+        }
+        break
+      }
+
+      // ─── DISCONNECT ───
       case 'disconnect': {
         const resp = await fetch(`${EVOLUTION_API_URL}/instance/logout/${instanceName}`, {
           method: 'DELETE',
-          headers,
+          headers: evoHeaders,
         })
-        result = await resp.json()
+        await resp.json()
 
-        await supabase
-          .from('whatsapp_instances')
+        await supabase.from('whatsapp_instances')
           .update({ status: 'disconnected', phone_number: null })
           .eq('instance_name', instanceName)
+
+        result = { status: 'disconnected' }
         break
       }
 
-      case 'set_webhook': {
-        const resp = await fetch(`${EVOLUTION_API_URL}/webhook/set/${instanceName}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            url: webhookUrl,
-            webhook_by_events: false,
-            events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
-          }),
-        })
-        result = await resp.json()
-
-        await supabase
-          .from('whatsapp_instances')
-          .update({ webhook_url: webhookUrl })
-          .eq('instance_name', instanceName)
-        break
-      }
-
+      // ─── SEND TEXT ───
       case 'send_text': {
         const { number, text } = body
         const resp = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
           method: 'POST',
-          headers,
+          headers: evoHeaders,
           body: JSON.stringify({ number, text }),
         })
-        result = await resp.json()
+        result = await resp.json() as Record<string, unknown>
         break
       }
 
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
     }
 
@@ -146,9 +224,9 @@ serve(async (req) => {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('evolution-api error:', message)
     return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })

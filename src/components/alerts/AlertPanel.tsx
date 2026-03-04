@@ -67,7 +67,7 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
               <h2 className="font-semibold text-foreground text-lg">Alertas</h2>
               <button
                 onClick={onClose}
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg active:scale-[0.93] transition-all cursor-pointer"
               >
                 <X size={20} />
               </button>
@@ -134,13 +134,13 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
                                       <>
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleResolve(alert.id, 'confirmed') }}
-                                          className="text-xs px-3 py-1.5 bg-success/10 text-success rounded-md hover:bg-success/20 transition-colors font-medium"
+                                          className="text-xs px-3 py-1.5 bg-success/10 text-success rounded-md hover:bg-success/20 active:scale-[0.97] transition-all cursor-pointer font-medium"
                                         >
                                           Confirmar pagamento
                                         </button>
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleResolve(alert.id, 'dismissed') }}
-                                          className="text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+                                          className="text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 active:scale-[0.97] transition-all cursor-pointer"
                                         >
                                           Dispensar
                                         </button>
@@ -149,7 +149,7 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
                                     {alert.type === 'receipt_review' && (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handleResolve(alert.id, 'reviewed') }}
-                                        className="text-xs px-3 py-1.5 bg-primary/10 text-primary rounded-md hover:bg-primary/20 transition-colors font-medium"
+                                        className="text-xs px-3 py-1.5 bg-primary/10 text-primary rounded-md hover:bg-primary/20 active:scale-[0.97] transition-all cursor-pointer font-medium"
                                       >
                                         Revisar comprovante
                                       </button>
@@ -157,7 +157,7 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
                                     {(alert.type === 'whatsapp_disconnected' || alert.type === 'message_failed') && (
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handleResolve(alert.id, 'acknowledged') }}
-                                        className="text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 transition-colors"
+                                        className="text-xs px-3 py-1.5 bg-muted text-muted-foreground rounded-md hover:bg-muted/80 active:scale-[0.97] transition-all cursor-pointer"
                                       >
                                         Entendi
                                       </button>

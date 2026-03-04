@@ -13,7 +13,7 @@ export default function AlertBell() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+        className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg active:scale-[0.93] transition-all cursor-pointer"
         aria-label="Alertas"
       >
         <Bell size={20} />

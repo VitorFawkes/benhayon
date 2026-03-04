@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { INVOICE_STATUS_LABELS, INVOICE_STATUS_COLORS, PAYMENT_METHOD_LABELS } from '@/constants'
@@ -31,7 +32,7 @@ export function InvoiceCard({
       {/* Linha principal */}
       <button
         type="button"
-        className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover transition-colors"
+        className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover active:bg-muted/50 transition-all cursor-pointer"
         onClick={onToggleExpand}
       >
         <div className="flex-1 min-w-0">
@@ -81,13 +82,13 @@ export function InvoiceCard({
           {INVOICE_STATUS_LABELS[invoice.status]}
         </Badge>
 
-        <span className="text-muted-foreground">
-          {expanded ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </span>
+        <motion.span
+          className="text-muted-foreground"
+          animate={{ rotate: expanded ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </motion.span>
       </button>
 
       {/* Barra de progresso */}
@@ -108,46 +109,56 @@ export function InvoiceCard({
       </div>
 
       {/* Detalhes expandidos: pagamentos */}
-      {expanded && (
-        <div className="border-t border-border px-4 py-3 bg-muted/20 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Pagamentos
-          </p>
-          {payments.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">
-              Nenhum pagamento registrado.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-surface"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground">
-                      {formatDate(payment.payment_date)}
-                    </span>
-                    <span className="text-foreground font-medium">
-                      {formatCurrency(payment.amount)}
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {PAYMENT_METHOD_LABELS[payment.payment_method] ?? payment.payment_method}
-                  </span>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-border px-4 py-3 bg-muted/20 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Pagamentos
+              </p>
+              {payments.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Nenhum pagamento registrado.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {payments.map((payment) => (
+                    <div
+                      key={payment.id}
+                      className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-surface"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted-foreground">
+                          {formatDate(payment.payment_date)}
+                        </span>
+                        <span className="text-foreground font-medium">
+                          {formatCurrency(payment.amount)}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {PAYMENT_METHOD_LABELS[payment.payment_method] ?? payment.payment_method}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          <div className="flex items-center justify-between pt-2 border-t border-border text-sm">
-            <span className="text-muted-foreground">Vencimento</span>
-            <span className="text-foreground">
-              {formatDate(invoice.due_date)}
-            </span>
-          </div>
-        </div>
-      )}
+              <div className="flex items-center justify-between pt-2 border-t border-border text-sm">
+                <span className="text-muted-foreground">Vencimento</span>
+                <span className="text-foreground">
+                  {formatDate(invoice.due_date)}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

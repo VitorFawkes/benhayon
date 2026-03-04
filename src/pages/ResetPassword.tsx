@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -24,19 +24,43 @@ export default function ResetPassword() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isReady, setIsReady] = useState(false)
+  const [isExpired, setIsExpired] = useState(false)
+  const readyRef = useRef(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<ResetForm>({
     resolver: zodResolver(resetSchema),
   })
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
+    function markReady() {
+      if (!readyRef.current) {
+        readyRef.current = true
         setIsReady(true)
+      }
+    }
+
+    // The PASSWORD_RECOVERY event may have already fired (captured by AuthContext)
+    // before this component mounts, so also check for an existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) markReady()
+    })
+
+    // Listen for PASSWORD_RECOVERY in case it fires after mount
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        markReady()
       }
     })
 
-    return () => subscription.unsubscribe()
+    // Timeout for expired/invalid links
+    const timeout = setTimeout(() => {
+      if (!readyRef.current) setIsExpired(true)
+    }, 5000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [])
 
   async function onSubmit(data: ResetForm) {
@@ -75,7 +99,23 @@ export default function ResetPassword() {
         </div>
 
         <div className="bg-surface rounded-xl shadow-card border border-border p-8">
-          {!isReady ? (
+          {isExpired && !isReady ? (
+            <div className="text-center py-4">
+              <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <KeyRound className="text-destructive" size={24} />
+              </div>
+              <h2 className="text-lg font-semibold text-foreground mb-2">Link inválido ou expirado</h2>
+              <p className="text-sm text-muted-foreground">
+                Solicite um novo link de recuperação.
+              </p>
+              <Link
+                to="/forgot-password"
+                className="inline-block mt-4 text-sm text-primary hover:text-primary-dark font-medium transition-colors"
+              >
+                Solicitar novo link
+              </Link>
+            </div>
+          ) : !isReady ? (
             <div className="text-center py-4">
               <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
               <p className="text-sm text-muted-foreground">Verificando link de recuperação...</p>

@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import type { WhatsAppInstance } from '@/types'
 import { toast } from 'sonner'
 
+// ─── Query: buscar instância do banco ───
+
 export function useWhatsAppInstance() {
   const { user } = useAuth()
 
@@ -23,72 +25,87 @@ export function useWhatsAppInstance() {
   })
 }
 
-export function useCreateWhatsAppInstance() {
+// ─── Mutation: criar instância + gerar QR code ───
+// A Edge Function cria na Evolution API, salva no banco, e configura webhook
+
+interface ConnectResult {
+  status: string
+  qrcode?: string | null
+  pairingCode?: string | null
+  instanceId?: string | null
+  phoneNumber?: string | null
+}
+
+export function useConnectWhatsApp() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<ConnectResult> => {
       const instanceName = `benhayon_${user!.id.slice(0, 8)}`
 
-      // Call Evolution API proxy (Edge Function)
       const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'create_instance', instanceName },
+        body: { action: 'create_and_connect', instanceName },
       })
 
       if (error) throw error
 
-      // Save instance to DB
-      const { data: instance, error: dbError } = await supabase
-        .from('whatsapp_instances')
-        .upsert({
-          profile_id: user!.id,
-          instance_name: instanceName,
-          instance_id: data?.instance?.instanceId || null,
-          status: 'connecting',
-        }, { onConflict: 'profile_id' })
-        .select()
-        .single()
+      // Refetch instance from DB (Edge Function saved/updated it)
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
 
-      if (dbError) throw dbError
-      return instance
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
+      return data as ConnectResult
     },
     onError: (error) => {
-      toast.error('Erro ao criar instância WhatsApp', {
-        description: error.message,
-      })
+      toast.error('Erro ao conectar WhatsApp', { description: error.message })
     },
   })
 }
 
-export function useConnectWhatsApp() {
-  return useMutation({
-    mutationFn: async (instanceName: string) => {
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'connect', instanceName },
-      })
+// ─── Mutation: verificar estado da conexão ───
 
-      if (error) throw error
-      return data as { base64?: string; pairingCode?: string }
-    },
-  })
+interface StateResult {
+  state: string
+  phoneNumber?: string | null
 }
 
 export function useCheckConnectionState() {
+  const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async (instanceName: string) => {
+    mutationFn: async (instanceName: string): Promise<StateResult> => {
       const { data, error } = await supabase.functions.invoke('evolution-api', {
         body: { action: 'connection_state', instanceName },
       })
 
       if (error) throw error
-      return data as { state: string }
+
+      // Edge Function updates DB, refetch
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
+
+      return data as StateResult
     },
   })
 }
+
+// ─── Mutation: gerar novo QR code ───
+
+export function useRefreshQRCode() {
+  return useMutation({
+    mutationFn: async (instanceName: string): Promise<{ qrcode?: string | null }> => {
+      const { data, error } = await supabase.functions.invoke('evolution-api', {
+        body: { action: 'connect', instanceName },
+      })
+
+      if (error) throw error
+      return data as { qrcode?: string | null }
+    },
+    onError: () => {
+      toast.error('Erro ao gerar novo QR Code')
+    },
+  })
+}
+
+// ─── Mutation: desconectar ───
 
 export function useDisconnectWhatsApp() {
   const queryClient = useQueryClient()
@@ -101,33 +118,14 @@ export function useDisconnectWhatsApp() {
 
       if (error) throw error
 
-      // Update DB status
-      await supabase
-        .from('whatsapp_instances')
-        .update({ status: 'disconnected', phone_number: null })
-        .eq('instance_name', instanceName)
-
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       toast.success('WhatsApp desconectado')
     },
     onError: (error) => {
       toast.error('Erro ao desconectar', { description: error.message })
-    },
-  })
-}
-
-export function useSetWebhook() {
-  return useMutation({
-    mutationFn: async ({ instanceName, webhookUrl }: { instanceName: string; webhookUrl: string }) => {
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'set_webhook', instanceName, webhookUrl },
-      })
-
-      if (error) throw error
-      return data
     },
   })
 }

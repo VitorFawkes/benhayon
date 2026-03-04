@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -11,88 +11,127 @@ import {
   RefreshCw,
   Power,
 } from 'lucide-react'
-import { useWhatsAppInstance, useCreateWhatsAppInstance, useConnectWhatsApp, useCheckConnectionState, useDisconnectWhatsApp } from '@/hooks/useWhatsApp'
+import {
+  useWhatsAppInstance,
+  useConnectWhatsApp,
+  useCheckConnectionState,
+  useRefreshQRCode,
+  useDisconnectWhatsApp,
+} from '@/hooks/useWhatsApp'
 import { useMessageLogs } from '@/hooks/useMessageLogs'
-import { formatDateTime } from '@/lib/formatters'
+import { formatDateTime, formatPhone } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
 export default function WhatsApp() {
-  const { data: instance, isLoading: loadingInstance } = useWhatsAppInstance()
-  const createInstance = useCreateWhatsAppInstance()
+  const { data: instance, isLoading: loadingInstance, refetch } = useWhatsAppInstance()
   const connectWhatsApp = useConnectWhatsApp()
   const checkState = useCheckConnectionState()
+  const refreshQR = useRefreshQRCode()
   const disconnectWhatsApp = useDisconnectWhatsApp()
   const { data: messages } = useMessageLogs({ limit: 20 })
 
   const [qrCode, setQrCode] = useState<string | null>(null)
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected')
+  const [isPolling, setIsPolling] = useState(false)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Determine current status from DB instance
+  const status = instance?.status || 'disconnected'
+
+  // Stop polling when connected or component unmounts
   useEffect(() => {
-    if (instance) {
-      setConnectionStatus(instance.status)
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
     }
-  }, [instance])
+  }, [])
 
-  // Poll connection state while connecting
+  // When status changes to connected, stop polling and clear QR
   useEffect(() => {
-    if (!isConnecting || !instance?.instance_name) return
+    if (status === 'connected') {
+      setQrCode(null)
+      setIsPolling(false)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [status])
 
-    const interval = setInterval(async () => {
+  // Start polling for connection state
+  function startPolling(instanceName: string) {
+    if (pollingRef.current) clearInterval(pollingRef.current)
+    setIsPolling(true)
+
+    pollingRef.current = setInterval(async () => {
       try {
-        const result = await checkState.mutateAsync(instance.instance_name)
+        const result = await checkState.mutateAsync(instanceName)
         if (result.state === 'open') {
-          setConnectionStatus('connected')
-          setIsConnecting(false)
           setQrCode(null)
+          setIsPolling(false)
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
           toast.success('WhatsApp conectado!')
         }
       } catch {
-        // ignore polling errors
+        // Ignore polling errors
       }
     }, 5000)
+  }
 
-    return () => clearInterval(interval)
-  }, [isConnecting, instance?.instance_name])
-
-  const handleConnect = useCallback(async () => {
+  async function handleConnect() {
     try {
-      setIsConnecting(true)
-      let inst = instance
+      const result = await connectWhatsApp.mutateAsync()
 
-      if (!inst) {
-        inst = await createInstance.mutateAsync()
+      if (result.status === 'already_connected') {
+        toast.success('WhatsApp já está conectado!')
+        await refetch()
+        return
       }
 
-      const result = await connectWhatsApp.mutateAsync(inst!.instance_name)
-      if (result.base64) {
-        setQrCode(result.base64)
-        setConnectionStatus('connecting')
+      if (result.qrcode) {
+        setQrCode(result.qrcode)
       }
-    } catch (error) {
-      setIsConnecting(false)
-      toast.error('Erro ao conectar WhatsApp')
-    }
-  }, [instance])
 
-  const handleDisconnect = useCallback(async () => {
-    if (!instance) return
-    await disconnectWhatsApp.mutateAsync(instance.instance_name)
-    setConnectionStatus('disconnected')
-    setQrCode(null)
-  }, [instance])
-
-  const handleRefreshQR = useCallback(async () => {
-    if (!instance) return
-    try {
-      const result = await connectWhatsApp.mutateAsync(instance.instance_name)
-      if (result.base64) {
-        setQrCode(result.base64)
+      // Start polling for connection state
+      const instanceName = instance?.instance_name || `benhayon_${(await refetch()).data?.instance_name}`
+      if (instanceName) {
+        startPolling(instanceName)
+      }
+      // Refetch to get the instance from DB
+      await refetch()
+      // If we have the instance name now, start polling
+      const refreshed = await refetch()
+      if (refreshed.data?.instance_name) {
+        startPolling(refreshed.data.instance_name)
       }
     } catch {
-      toast.error('Erro ao gerar novo QR Code')
+      // Error handled by mutation onError
     }
-  }, [instance])
+  }
+
+  async function handleRefreshQR() {
+    if (!instance?.instance_name) return
+    try {
+      const result = await refreshQR.mutateAsync(instance.instance_name)
+      if (result.qrcode) {
+        setQrCode(result.qrcode)
+      }
+    } catch {
+      // Error handled by mutation onError
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!instance?.instance_name) return
+    await disconnectWhatsApp.mutateAsync(instance.instance_name)
+    setQrCode(null)
+    setIsPolling(false)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
 
   if (loadingInstance) {
     return (
@@ -120,9 +159,9 @@ export default function WhatsApp() {
           <div className="flex items-center gap-3">
             <div className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center',
-              connectionStatus === 'connected' ? 'bg-success-light' : 'bg-muted'
+              status === 'connected' ? 'bg-success-light' : 'bg-muted'
             )}>
-              {connectionStatus === 'connected' ? (
+              {status === 'connected' ? (
                 <Wifi className="text-success" size={20} />
               ) : (
                 <WifiOff className="text-muted-foreground" size={20} />
@@ -131,15 +170,15 @@ export default function WhatsApp() {
             <div>
               <h2 className="font-semibold text-foreground">Conexão WhatsApp</h2>
               <p className="text-sm text-muted-foreground">
-                {connectionStatus === 'connected' && 'Conectado'}
-                {connectionStatus === 'connecting' && 'Aguardando leitura do QR Code...'}
-                {connectionStatus === 'disconnected' && 'Desconectado'}
+                {status === 'connected' && 'Conectado'}
+                {status === 'connecting' && 'Aguardando leitura do QR Code...'}
+                {status === 'disconnected' && 'Desconectado'}
               </p>
             </div>
           </div>
 
           <div className="flex gap-2">
-            {connectionStatus === 'connected' ? (
+            {status === 'connected' ? (
               <button
                 onClick={handleDisconnect}
                 disabled={disconnectWhatsApp.isPending}
@@ -151,32 +190,32 @@ export default function WhatsApp() {
             ) : (
               <button
                 onClick={handleConnect}
-                disabled={isConnecting || createInstance.isPending}
+                disabled={connectWhatsApp.isPending || isPolling}
                 className="h-9 px-4 bg-primary hover:bg-primary-dark text-primary-foreground rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                {isConnecting ? (
+                {connectWhatsApp.isPending ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
                   <QrCode size={16} />
                 )}
-                Conectar
+                {connectWhatsApp.isPending ? 'Conectando...' : 'Conectar'}
               </button>
             )}
           </div>
         </div>
 
         {/* Connected info */}
-        {connectionStatus === 'connected' && instance?.phone_number && (
+        {status === 'connected' && instance?.phone_number && (
           <div className="flex items-center gap-2 p-3 bg-success-light rounded-lg">
             <Phone size={16} className="text-success" />
             <span className="text-sm font-medium text-success">
-              Conectado: {instance.phone_number}
+              Conectado: {formatPhone('+' + instance.phone_number)}
             </span>
           </div>
         )}
 
         {/* QR Code */}
-        {qrCode && connectionStatus === 'connecting' && (
+        {qrCode && status !== 'connected' && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -192,14 +231,35 @@ export default function WhatsApp() {
                 className="w-64 h-64"
               />
             </div>
-            <button
-              onClick={handleRefreshQR}
-              className="text-sm text-primary hover:text-primary-dark flex items-center gap-1 transition-colors"
-            >
-              <RefreshCw size={14} />
-              Gerar novo QR Code
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRefreshQR}
+                disabled={refreshQR.isPending}
+                className="text-sm text-primary hover:text-primary-dark flex items-center gap-1 transition-colors"
+              >
+                {refreshQR.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                Gerar novo QR Code
+              </button>
+            </div>
+            {isPolling && (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" />
+                Verificando conexão a cada 5 segundos...
+              </p>
+            )}
           </motion.div>
+        )}
+
+        {/* Polling without QR (waiting for reconnection) */}
+        {!qrCode && isPolling && status !== 'connected' && (
+          <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
+            <Loader2 size={16} className="animate-spin" />
+            <span className="text-sm">Verificando conexão...</span>
+          </div>
         )}
       </div>
 

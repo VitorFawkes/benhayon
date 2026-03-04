@@ -76,6 +76,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ─── Clickable elements ─── */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+a[href] {
+  cursor: pointer;
+}
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar {
   width: 6px;

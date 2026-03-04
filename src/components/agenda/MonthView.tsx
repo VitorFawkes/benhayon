@@ -92,7 +92,7 @@ export function MonthView({ selectedDate, appointments, onDayClick }: MonthViewP
                   type="button"
                   onClick={() => onDayClick(day)}
                   className={cn(
-                    'relative flex flex-col items-start p-1.5 min-h-[80px] border-r border-border/30 last:border-r-0 transition-colors hover:bg-primary/5 cursor-pointer text-left',
+                    'relative flex flex-col items-start p-1.5 min-h-[80px] border-r border-border/30 last:border-r-0 transition-colors hover:bg-primary/5 active:bg-primary/10 cursor-pointer text-left',
                     !isCurrentMonth && 'opacity-40'
                   )}
                 >

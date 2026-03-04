@@ -20,7 +20,7 @@ export function AppointmentCard({ appointment, onClick, compact = false }: Appoi
         type="button"
         onClick={onClick}
         className={cn(
-          'w-full text-left rounded px-1.5 py-0.5 text-xs truncate transition-opacity hover:opacity-80',
+          'w-full text-left rounded px-1.5 py-0.5 text-xs truncate transition-all hover:opacity-80 active:opacity-60 cursor-pointer',
           statusColor
         )}
         title={`${patientName} - ${formatTime(appointment.start_time)} - ${formatTime(appointment.end_time)}`}
@@ -36,7 +36,7 @@ export function AppointmentCard({ appointment, onClick, compact = false }: Appoi
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left rounded-md px-2 py-1.5 text-xs transition-all hover:shadow-md cursor-pointer border-l-3',
+        'w-full text-left rounded-md px-2 py-1.5 text-xs transition-all hover:shadow-md active:scale-[0.98] active:shadow-sm cursor-pointer border-l-3',
         appointment.status === 'scheduled' && 'bg-primary/10 border-l-primary',
         appointment.status === 'completed' && 'bg-success/10 border-l-success',
         appointment.status === 'cancelled' && 'bg-muted border-l-muted-foreground',

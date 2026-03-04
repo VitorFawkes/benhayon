@@ -116,7 +116,7 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
               {/* Grid line + clickable slot */}
               <button
                 type="button"
-                className="flex-1 border-t border-border/50 hover:bg-primary/5 transition-colors cursor-pointer"
+                className="flex-1 border-t border-border/50 hover:bg-primary/5 active:bg-primary/10 transition-colors cursor-pointer"
                 style={{ height: `${HOUR_HEIGHT}px` }}
                 onClick={() => handleSlotClick(hour)}
                 aria-label={`Agendar às ${hour}:00`}

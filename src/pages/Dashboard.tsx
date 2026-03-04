@@ -188,7 +188,7 @@ function QuickAction({
   return (
     <Link
       to={href}
-      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors group"
+      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted active:bg-muted/80 active:scale-[0.98] transition-all cursor-pointer group"
     >
       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
         <Icon size={16} className="text-primary" />

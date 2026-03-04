@@ -57,7 +57,7 @@ export default function MobileNav() {
               </div>
               <button
                 onClick={() => setMobileOpen(false)}
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg active:scale-[0.95] transition-all cursor-pointer"
               >
                 <X size={20} />
               </button>
@@ -72,10 +72,10 @@ export default function MobileNav() {
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 active:scale-[0.98]',
                       isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        ? 'bg-primary/10 text-primary border-l-[3px] border-l-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground border-l-[3px] border-l-transparent'
                     )
                   }
                 >

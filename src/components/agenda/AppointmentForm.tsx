@@ -156,7 +156,7 @@ export function AppointmentForm({
         })
         setIsRecurring(false)
         setFrequency('weekly')
-        setDayOfWeek(new Date(dateStr).getDay())
+        setDayOfWeek(new Date(dateStr + 'T00:00:00').getDay())
         setStartsAt(dateStr)
         setEndsAt('')
       }
@@ -168,7 +168,7 @@ export function AppointmentForm({
   const watchedDate = watch('date')
   useEffect(() => {
     if (watchedDate && !isEdit) {
-      const d = new Date(watchedDate)
+      const d = new Date(watchedDate + 'T00:00:00')
       if (!isNaN(d.getTime())) {
         setDayOfWeek(d.getDay())
         setStartsAt(watchedDate)
@@ -182,7 +182,7 @@ export function AppointmentForm({
 
     const stepWeeks = frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4
 
-    let current = new Date(startsAt)
+    let current = new Date(startsAt + 'T00:00:00')
     while (current.getDay() !== dayOfWeek) {
       current = addDays(current, 1)
     }
@@ -193,7 +193,7 @@ export function AppointmentForm({
 
     for (let i = 0; i < totalWeeks; i++) {
       const date = addWeeks(current, i * stepWeeks)
-      if (endsAt && date > new Date(endsAt)) break
+      if (endsAt && date > new Date(endsAt + 'T23:59:59')) break
       count++
       lastDate = date
     }

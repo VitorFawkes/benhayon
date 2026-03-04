@@ -65,11 +65,11 @@ export default function Sidebar() {
             to={item.to}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 active:scale-[0.98]',
                 collapsed && 'justify-center px-0',
                 isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary/10 text-primary border-l-[3px] border-l-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground border-l-[3px] border-l-transparent'
               )
             }
           >
@@ -91,7 +91,7 @@ export default function Sidebar() {
       <div className="p-2 border-t border-border">
         <button
           onClick={toggle}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 cursor-pointer active:scale-[0.97]"
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           {!collapsed && <span>Recolher</span>}

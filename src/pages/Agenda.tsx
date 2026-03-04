@@ -181,7 +181,7 @@ export default function Agenda() {
                 type="button"
                 onClick={() => setViewMode(key)}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 cursor-pointer active:scale-[0.95]',
                   viewMode === key
                     ? 'bg-surface text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
