@@ -318,7 +318,7 @@ async function classifyIntent(text: string): Promise<{ intent: string; confidenc
     },
     body: JSON.stringify({
       model: 'gpt-5.1',
-      max_tokens: 256,
+      max_completion_tokens: 256,
       temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [
@@ -392,7 +392,7 @@ async function analyzeReceipt(imageUrl: string): Promise<{
     },
     body: JSON.stringify({
       model: 'gpt-5.1',
-      max_tokens: 512,
+      max_completion_tokens: 512,
       temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [

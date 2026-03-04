@@ -10,21 +10,22 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 serve(async () => {
   try {
-    // Get all profiles with ai_settings to check allowed hours
     const now = new Date()
-    const currentHour = now.getUTCHours() - 3 // Adjust for BRT (UTC-3)
-    const currentDay = now.getDay() // 0=Sunday, 6=Saturday
 
-    // Fetch queued messages
+    // Fetch queued messages that are scheduled for now or past
     const { data: messages, error: fetchError } = await supabase
       .from('message_queue')
-      .select('*, patient:patients(phone, full_name)')
+      .select('*')
       .eq('status', 'queued')
       .lte('scheduled_for', now.toISOString())
       .order('created_at', { ascending: true })
       .limit(10)
 
-    if (fetchError) throw fetchError
+    if (fetchError) {
+      console.error('Fetch error:', fetchError)
+      return new Response(JSON.stringify({ sent: 0, error: fetchError.message }), { status: 200 })
+    }
+
     if (!messages || messages.length === 0) {
       return new Response(JSON.stringify({ sent: 0 }), { status: 200 })
     }
@@ -33,27 +34,28 @@ serve(async () => {
 
     for (const msg of messages) {
       try {
-        // Get AI settings for rate limiting and schedule checking
+        // Get patient phone
+        const { data: patient } = await supabase
+          .from('patients')
+          .select('phone, full_name')
+          .eq('id', msg.patient_id)
+          .single()
+
+        if (!patient?.phone) {
+          await supabase.from('message_queue')
+            .update({ status: 'failed', last_error: 'Patient phone not found', attempts: msg.attempts + 1 })
+            .eq('id', msg.id)
+          continue
+        }
+
+        // Get AI settings for rate limiting
         const { data: aiSettings } = await supabase
           .from('ai_settings')
-          .select('send_start_hour, send_end_hour, send_on_weekends, min_seconds_between_messages')
+          .select('min_seconds_between_messages')
           .eq('profile_id', msg.profile_id)
           .single()
 
-        if (aiSettings) {
-          // Check if within allowed hours
-          const adjustedHour = currentHour < 0 ? currentHour + 24 : currentHour
-          if (adjustedHour < aiSettings.send_start_hour || adjustedHour >= aiSettings.send_end_hour) {
-            continue // Skip, outside allowed hours
-          }
-
-          // Check weekends
-          if (!aiSettings.send_on_weekends && (currentDay === 0 || currentDay === 6)) {
-            continue // Skip weekends
-          }
-        }
-
-        // Get WhatsApp instance for this profile
+        // Get WhatsApp instance
         const { data: instance } = await supabase
           .from('whatsapp_instances')
           .select('instance_name, status')
@@ -62,14 +64,8 @@ serve(async () => {
           .single()
 
         if (!instance) {
-          // WhatsApp not connected, fail the message
-          await supabase
-            .from('message_queue')
-            .update({
-              status: 'failed',
-              last_error: 'WhatsApp não conectado',
-              attempts: msg.attempts + 1,
-            })
+          await supabase.from('message_queue')
+            .update({ status: 'failed', last_error: 'WhatsApp not connected', attempts: msg.attempts + 1 })
             .eq('id', msg.id)
 
           await supabase.from('alerts').insert({
@@ -77,20 +73,19 @@ serve(async () => {
             type: 'message_failed',
             severity: 'warning',
             title: 'Falha ao enviar mensagem',
-            description: `WhatsApp não conectado. Mensagem para ${msg.patient?.full_name} não enviada.`,
+            description: `WhatsApp não conectado. Mensagem para ${patient.full_name} não enviada.`,
             patient_id: msg.patient_id,
           })
           continue
         }
 
         // Mark as sending
-        await supabase
-          .from('message_queue')
+        await supabase.from('message_queue')
           .update({ status: 'sending' })
           .eq('id', msg.id)
 
         // Send via Evolution API
-        const phone = msg.patient?.phone?.replace('+', '') || ''
+        const phone = patient.phone.replace('+', '')
         const response = await fetch(
           `${EVOLUTION_API_URL}/message/sendText/${instance.instance_name}`,
           {
@@ -108,12 +103,11 @@ serve(async () => {
 
         if (!response.ok) {
           const errorText = await response.text()
-          throw new Error(`Evolution API error: ${response.status} - ${errorText}`)
+          throw new Error(`Evolution API: ${response.status} - ${errorText}`)
         }
 
         // Success
-        await supabase
-          .from('message_queue')
+        await supabase.from('message_queue')
           .update({ status: 'sent', sent_at: new Date().toISOString() })
           .eq('id', msg.id)
 
@@ -138,32 +132,14 @@ serve(async () => {
 
         const newAttempts = msg.attempts + 1
         if (newAttempts >= msg.max_attempts) {
-          await supabase
-            .from('message_queue')
+          await supabase.from('message_queue')
             .update({ status: 'failed', attempts: newAttempts, last_error: errorMsg })
             .eq('id', msg.id)
-
-          await supabase.from('alerts').insert({
-            profile_id: msg.profile_id,
-            type: 'message_failed',
-            severity: 'warning',
-            title: 'Falha ao enviar mensagem',
-            description: `Após ${newAttempts} tentativas: ${errorMsg}`,
-            patient_id: msg.patient_id,
-          })
         } else {
-          // Retry with exponential backoff
           const backoffMinutes = Math.pow(2, newAttempts) * 5
           const retryAt = new Date(Date.now() + backoffMinutes * 60 * 1000)
-
-          await supabase
-            .from('message_queue')
-            .update({
-              status: 'queued',
-              attempts: newAttempts,
-              last_error: errorMsg,
-              scheduled_for: retryAt.toISOString(),
-            })
+          await supabase.from('message_queue')
+            .update({ status: 'queued', attempts: newAttempts, last_error: errorMsg, scheduled_for: retryAt.toISOString() })
             .eq('id', msg.id)
         }
       }
