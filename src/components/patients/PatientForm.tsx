@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -43,6 +44,7 @@ const patientSchema = z.object({
   clinic_id: z.string().nullable().optional(),
   status: z.enum(['active', 'inactive', 'paused'] as const),
   notes: z.string().nullable().optional(),
+  ai_enabled: z.boolean().default(true),
 })
 
 type PatientFormData = z.infer<typeof patientSchema>
@@ -123,6 +125,7 @@ export default function PatientForm({
       clinic_id: patient?.clinic_id ?? null,
       status: patient?.status ?? 'active',
       notes: patient?.notes ?? '',
+      ai_enabled: patient?.ai_enabled ?? true,
     },
   })
 
@@ -138,6 +141,7 @@ export default function PatientForm({
         clinic_id: patient?.clinic_id ?? null,
         status: patient?.status ?? 'active',
         notes: patient?.notes ?? '',
+        ai_enabled: patient?.ai_enabled ?? true,
       })
       setCurrencyDisplay(
         patient ? formatCurrencyInput(String(Math.round(patient.session_value * 100))) : ''
@@ -158,6 +162,7 @@ export default function PatientForm({
         clinic_id: data.payment_type === 'clinic' ? (data.clinic_id ?? null) : null,
         status: data.status,
         notes: data.notes || null,
+        ai_enabled: data.ai_enabled,
       }
 
       if (mode === 'create') {
@@ -422,6 +427,29 @@ export default function PatientForm({
               placeholder="Observações sobre o paciente..."
               rows={3}
               {...register('notes')}
+            />
+          </div>
+
+          {/* AI Enabled */}
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div>
+              <Label htmlFor="ai_enabled" className="text-sm font-medium">
+                IA Ativa
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Habilitar processamento de IA para este paciente
+              </p>
+            </div>
+            <Controller
+              name="ai_enabled"
+              control={control}
+              render={({ field }) => (
+                <Switch
+                  id="ai_enabled"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
             />
           </div>
 

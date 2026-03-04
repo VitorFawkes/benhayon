@@ -68,6 +68,12 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
                   Particular
                 </Badge>
               )}
+
+              {patient.ai_enabled === false && (
+                <Badge variant="outline" className="text-xs text-muted-foreground bg-muted/50">
+                  IA off
+                </Badge>
+              )}
             </div>
           </div>
         </CardContent>

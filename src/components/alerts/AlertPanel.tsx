@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, CheckCircle, AlertTriangle, Info, MessageSquare, FileImage, Wifi, Send } from 'lucide-react'
 import { useAlerts, useMarkAlertRead, useResolveAlert } from '@/hooks/useAlerts'
+import { useReceiptAnalysis, useConfirmReceipt, useRejectReceipt } from '@/hooks/useReceiptAnalyses'
+import { ReceiptViewer } from '@/components/billing/ReceiptViewer'
 import { formatDateTime } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import type { Alert, AlertType, AlertSeverity } from '@/types'
@@ -30,6 +33,12 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
   const { data: alerts = [] } = useAlerts()
   const markRead = useMarkAlertRead()
   const resolveAlert = useResolveAlert()
+  const confirmReceipt = useConfirmReceipt()
+  const rejectReceipt = useRejectReceipt()
+
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | undefined>(undefined)
+  const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
+  const { data: receiptData } = useReceiptAnalysis(selectedReceiptId)
 
   const unresolvedAlerts = alerts.filter((a) => !a.resolved_at)
   const resolvedAlerts = alerts.filter((a) => a.resolved_at).slice(0, 10)
@@ -148,7 +157,15 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
                                     )}
                                     {alert.type === 'receipt_review' && (
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); handleResolve(alert.id, 'reviewed') }}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          if (alert.receipt_analysis_id) {
+                                            setSelectedReceiptId(alert.receipt_analysis_id)
+                                            setReceiptViewerOpen(true)
+                                          } else {
+                                            handleResolve(alert.id, 'reviewed')
+                                          }
+                                        }}
                                         className="text-xs px-3 py-1.5 bg-primary/10 text-primary rounded-md hover:bg-primary/20 active:scale-[0.97] transition-all cursor-pointer font-medium"
                                       >
                                         Revisar comprovante
@@ -201,6 +218,26 @@ export default function AlertPanel({ open, onClose }: AlertPanelProps) {
           </motion.div>
         </>
       )}
+
+      {/* Receipt Viewer */}
+      <ReceiptViewer
+        open={receiptViewerOpen}
+        onOpenChange={(isOpen) => {
+          setReceiptViewerOpen(isOpen)
+          if (!isOpen) setSelectedReceiptId(undefined)
+        }}
+        receipt={receiptData ?? null}
+        onConfirm={async (receipt) => {
+          await confirmReceipt.mutateAsync(receipt)
+          setReceiptViewerOpen(false)
+          setSelectedReceiptId(undefined)
+        }}
+        onReject={async (receipt) => {
+          await rejectReceipt.mutateAsync(receipt)
+          setReceiptViewerOpen(false)
+          setSelectedReceiptId(undefined)
+        }}
+      />
     </AnimatePresence>
   )
 }

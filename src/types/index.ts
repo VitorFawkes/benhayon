@@ -51,6 +51,7 @@ export interface Patient {
   payment_type: PatientPaymentType
   status: PatientStatus
   notes: string | null
+  ai_enabled: boolean
   created_at: string
   updated_at: string
   deleted_at: string | null

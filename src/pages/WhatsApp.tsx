@@ -19,7 +19,9 @@ import {
   useDisconnectWhatsApp,
 } from '@/hooks/useWhatsApp'
 import { useMessageLogs } from '@/hooks/useMessageLogs'
-import { formatDateTime, formatPhone } from '@/lib/formatters'
+import MessageItem from '@/components/messages/MessageItem'
+import MediaViewer from '@/components/messages/MediaViewer'
+import { formatPhone } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
 export default function WhatsApp() {
@@ -32,6 +34,7 @@ export default function WhatsApp() {
 
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Determine current status from DB instance
@@ -271,33 +274,33 @@ export default function WhatsApp() {
             Log de Mensagens
           </h2>
         </div>
-        <div className="divide-y divide-border">
+        <div className="p-4">
           {!messages?.length ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               Nenhuma mensagem registrada ainda.
             </div>
           ) : (
-            messages.map((msg) => (
-              <div key={msg.id} className="px-6 py-3 flex items-center gap-4 text-sm">
-                <span className={cn(
-                  'w-2 h-2 rounded-full flex-shrink-0',
-                  msg.direction === 'inbound' ? 'bg-info' : 'bg-success'
-                )} />
-                <span className="text-muted-foreground w-32 flex-shrink-0">
-                  {formatDateTime(msg.created_at)}
-                </span>
-                <span className="font-medium text-foreground truncate">
-                  {msg.patient?.full_name || 'Desconhecido'}
-                </span>
-                <span className="text-muted-foreground capitalize">{msg.message_type}</span>
-                <span className="text-muted-foreground truncate flex-1">
-                  {msg.content?.slice(0, 80) || '(mídia)'}
-                </span>
-              </div>
-            ))
+            <div className="space-y-3">
+              {messages.map((msg) => (
+                <MessageItem
+                  key={msg.id}
+                  message={msg}
+                  onImageClick={(url) => setSelectedImageUrl(url)}
+                />
+              ))}
+            </div>
           )}
         </div>
       </div>
+
+      {/* Media Viewer */}
+      <MediaViewer
+        open={!!selectedImageUrl}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setSelectedImageUrl(null)
+        }}
+        imageUrl={selectedImageUrl}
+      />
     </motion.div>
   )
 }

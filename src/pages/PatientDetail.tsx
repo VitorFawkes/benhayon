@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   Pencil,
@@ -15,10 +16,12 @@ import {
   CreditCard,
   MessageSquare,
   Clock,
+  Bot,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
@@ -29,7 +32,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import PatientForm from '@/components/patients/PatientForm'
+import PatientSummary from '@/components/patients/PatientSummary'
+import PatientSessions from '@/components/patients/PatientSessions'
+import PatientPayments from '@/components/patients/PatientPayments'
+import PatientMessages from '@/components/patients/PatientMessages'
 import { usePatient, useSoftDeletePatient } from '@/hooks/usePatients'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPhone, formatDate } from '@/lib/formatters'
 import { PATIENT_STATUS_LABELS, PATIENT_STATUS_COLORS } from '@/constants'
@@ -39,9 +47,24 @@ export default function PatientDetail() {
   const navigate = useNavigate()
   const { data: patient, isLoading } = usePatient(id)
   const softDelete = useSoftDeletePatient()
+  const queryClient = useQueryClient()
 
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const handleToggleAI = async () => {
+    if (!patient) return
+    try {
+      await supabase
+        .from('patients')
+        .update({ ai_enabled: !patient.ai_enabled })
+        .eq('id', patient.id)
+      queryClient.invalidateQueries({ queryKey: ['patients'] })
+      toast.success(patient.ai_enabled ? 'IA desativada para este paciente.' : 'IA ativada para este paciente.')
+    } catch {
+      toast.error('Erro ao alterar configuração de IA.')
+    }
+  }
 
   const handleDelete = async () => {
     if (!id) return
@@ -228,12 +251,40 @@ export default function PatientDetail() {
                 </div>
               </div>
             )}
+
+            {/* AI Toggle */}
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
+                patient.ai_enabled ? 'bg-primary/10' : 'bg-muted'
+              )}>
+                <Bot className={cn('h-4 w-4', patient.ai_enabled ? 'text-primary' : 'text-muted-foreground')} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs text-muted-foreground">Inteligência Artificial</p>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={patient.ai_enabled}
+                    onCheckedChange={handleToggleAI}
+                  />
+                  <span className={cn(
+                    'text-sm font-medium',
+                    patient.ai_enabled ? 'text-primary' : 'text-muted-foreground'
+                  )}>
+                    {patient.ai_enabled ? 'IA Ativa' : 'IA Inativa'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Summary */}
+      <PatientSummary patientId={patient.id} sessionValue={patient.session_value} />
+
       {/* Tabs */}
-      <Tabs defaultValue="sessions">
+      <Tabs defaultValue="sessions" className="mt-6">
         <TabsList>
           <TabsTrigger value="sessions" className="gap-1.5">
             <CalendarDays className="h-4 w-4" />
@@ -250,39 +301,15 @@ export default function PatientDetail() {
         </TabsList>
 
         <TabsContent value="sessions">
-          <Card>
-            <CardContent className="p-8 text-center">
-              <CalendarDays className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-sm font-medium text-foreground">Sessões</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Em breve — O histórico de sessões aparecerá aqui.
-              </p>
-            </CardContent>
-          </Card>
+          <PatientSessions patientId={patient.id} />
         </TabsContent>
 
         <TabsContent value="payments">
-          <Card>
-            <CardContent className="p-8 text-center">
-              <CreditCard className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-sm font-medium text-foreground">Pagamentos</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Em breve — O histórico de pagamentos aparecerá aqui.
-              </p>
-            </CardContent>
-          </Card>
+          <PatientPayments patientId={patient.id} />
         </TabsContent>
 
         <TabsContent value="messages">
-          <Card>
-            <CardContent className="p-8 text-center">
-              <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-sm font-medium text-foreground">Mensagens</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Em breve — O log de mensagens aparecerá aqui.
-              </p>
-            </CardContent>
-          </Card>
+          <PatientMessages patientId={patient.id} />
         </TabsContent>
       </Tabs>
 

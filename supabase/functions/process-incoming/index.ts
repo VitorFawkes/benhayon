@@ -72,6 +72,22 @@ serve(async (_req) => {
 
         const messageType = messageLog.message_type
 
+        // Check if AI is enabled for this patient
+        if (messageLog.patient_id) {
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('ai_enabled')
+            .eq('id', messageLog.patient_id)
+            .single()
+
+          if (patientData && !patientData.ai_enabled) {
+            // Skip AI processing for this patient
+            await supabase.from('processing_queue').update({ status: 'completed' }).eq('id', item.id)
+            processed++
+            continue
+          }
+        }
+
         // ─── Process TEXT ───
         if (messageType === 'text' && aiSettings?.analyze_text_intent) {
           const intent = await classifyIntent(messageLog.content || '')

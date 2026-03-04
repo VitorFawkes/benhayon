@@ -34,16 +34,24 @@ serve(async () => {
 
     for (const msg of messages) {
       try {
-        // Get patient phone
+        // Get patient phone and ai_enabled status
         const { data: patient } = await supabase
           .from('patients')
-          .select('phone, full_name')
+          .select('phone, full_name, ai_enabled')
           .eq('id', msg.patient_id)
           .single()
 
         if (!patient?.phone) {
           await supabase.from('message_queue')
             .update({ status: 'failed', last_error: 'Patient phone not found', attempts: msg.attempts + 1 })
+            .eq('id', msg.id)
+          continue
+        }
+
+        // Check if AI is enabled for this patient
+        if (patient.ai_enabled === false) {
+          await supabase.from('message_queue')
+            .update({ status: 'cancelled', last_error: 'IA desativada para este paciente' })
             .eq('id', msg.id)
           continue
         }

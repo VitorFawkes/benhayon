@@ -112,37 +112,46 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
 
     if (!invoice) continue
 
-    // Queue billing message
-    const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-    const template = (settings.billing_template as string) || ''
-    const message = renderTemplate(template, {
-      nome: patient.full_name as string,
-      valor: totalAmount.toFixed(2),
-      mes: monthName,
-      sessoes: String(count),
-      vencimento: dueDate.toLocaleDateString('pt-BR'),
-    })
+    // Check if AI is enabled for this patient before queuing message
+    const { data: patientCheck } = await supabase
+      .from('patients')
+      .select('ai_enabled')
+      .eq('id', patientId)
+      .single()
 
-    // Schedule within allowed hours
-    const sendHour = (settings.send_start_hour as number) || 9
-    const scheduledFor = new Date(now)
-    scheduledFor.setHours(sendHour, Math.floor(Math.random() * 60), 0) // Spread across the hour
+    if (patientCheck && patientCheck.ai_enabled !== false) {
+      // Queue billing message only if AI is enabled
+      const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      const template = (settings.billing_template as string) || ''
+      const message = renderTemplate(template, {
+        nome: patient.full_name as string,
+        valor: totalAmount.toFixed(2),
+        mes: monthName,
+        sessoes: String(count),
+        vencimento: dueDate.toLocaleDateString('pt-BR'),
+      })
 
-    await supabase.from('message_queue').insert({
-      profile_id: profileId,
-      patient_id: patientId,
-      invoice_id: invoice.id,
-      message_type: 'billing',
-      message_content: message,
-      scheduled_for: scheduledFor.toISOString(),
-      escalation_level: 0,
-    })
+      // Schedule within allowed hours
+      const sendHour = (settings.send_start_hour as number) || 9
+      const scheduledFor = new Date(now)
+      scheduledFor.setHours(sendHour, Math.floor(Math.random() * 60), 0) // Spread across the hour
 
-    // Update invoice sent_at
-    await supabase
-      .from('invoices')
-      .update({ sent_at: new Date().toISOString() })
-      .eq('id', invoice.id)
+      await supabase.from('message_queue').insert({
+        profile_id: profileId,
+        patient_id: patientId,
+        invoice_id: invoice.id,
+        message_type: 'billing',
+        message_content: message,
+        scheduled_for: scheduledFor.toISOString(),
+        escalation_level: 0,
+      })
+
+      // Update invoice sent_at
+      await supabase
+        .from('invoices')
+        .update({ sent_at: new Date().toISOString() })
+        .eq('id', invoice.id)
+    }
   }
 }
 
@@ -203,6 +212,15 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
 
     if (!shouldSend || !template) continue
 
+    // Check if AI is enabled for this patient before sending reminder
+    const { data: patientAICheck } = await supabase
+      .from('patients')
+      .select('ai_enabled')
+      .eq('id', invoice.patient_id)
+      .single()
+
+    if (patientAICheck && patientAICheck.ai_enabled === false) continue
+
     const monthName = new Date(invoice.reference_month).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     const message = renderTemplate(template, {
       nome: patient.full_name as string,
@@ -260,6 +278,15 @@ async function sendThankYouMessages(settings: Record<string, unknown>) {
       .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
     if ((count || 0) > 0) continue
+
+    // Check if AI is enabled for this patient before sending thank you
+    const { data: patientThankYouCheck } = await supabase
+      .from('patients')
+      .select('ai_enabled')
+      .eq('id', receipt.patient_id)
+      .single()
+
+    if (patientThankYouCheck && patientThankYouCheck.ai_enabled === false) continue
 
     const patient = receipt.patient as Record<string, unknown>
     const template = settings.thank_you_template as string

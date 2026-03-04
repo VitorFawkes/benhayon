@@ -19,6 +19,7 @@ import {
 } from '@/constants'
 import { useInvoices, useInvoice } from '@/hooks/useInvoices'
 import { usePayments } from '@/hooks/usePayments'
+import { useReceiptAnalyses, useConfirmReceipt, useRejectReceipt } from '@/hooks/useReceiptAnalyses'
 import type { InvoiceStatus, ReceiptAnalysis, Payment } from '@/types'
 
 import { Button } from '@/components/ui/button'
@@ -108,8 +109,10 @@ export default function Billing() {
     return { total, paid, pending, count: invoices.length, paidCount }
   }, [invoices])
 
-  // ─── Placeholder receipts (tab 3) ───
-  const placeholderReceipts: ReceiptAnalysis[] = []
+  // ─── Receipt queries & mutations ───
+  const { data: receipts = [] } = useReceiptAnalyses()
+  const confirmReceipt = useConfirmReceipt()
+  const rejectReceipt = useRejectReceipt()
 
   return (
     <motion.div
@@ -393,7 +396,7 @@ export default function Billing() {
             TAB 3: COMPROVANTES
         ════════════════════════════════════ */}
         <TabsContent value="receipts" className="space-y-4">
-          {placeholderReceipts.length === 0 ? (
+          {receipts.length === 0 ? (
             <div className="bg-surface border border-border rounded-xl p-8 text-center">
               <Receipt className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-muted-foreground mb-1">
@@ -417,7 +420,7 @@ export default function Billing() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {placeholderReceipts.map((receipt) => {
+                  {receipts.map((receipt) => {
                     const statusConfig =
                       RECEIPT_STATUS_CONFIG[receipt.status] ??
                       RECEIPT_STATUS_CONFIG.pending_review
@@ -489,6 +492,12 @@ export default function Billing() {
         open={receiptViewerOpen}
         onOpenChange={setReceiptViewerOpen}
         receipt={selectedReceipt}
+        onConfirm={async (receipt) => {
+          await confirmReceipt.mutateAsync(receipt)
+        }}
+        onReject={async (receipt) => {
+          await rejectReceipt.mutateAsync(receipt)
+        }}
       />
     </motion.div>
   )
