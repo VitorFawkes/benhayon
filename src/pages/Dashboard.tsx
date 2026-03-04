@@ -37,13 +37,6 @@ const METRIC_LABELS: Record<DashboardMetric, string> = {
   noShows: 'Faltas do Mês',
 }
 
-const METRIC_VALUE_LABELS: Record<DashboardMetric, string> = {
-  revenue: 'Pago',
-  pending: 'Pendente',
-  activePatients: 'Telefone',
-  sessions: 'Sessões',
-  noShows: 'Faltas',
-}
 
 export default function Dashboard() {
   const { data: stats, isLoading: loadingStats } = useDashboardStats()
