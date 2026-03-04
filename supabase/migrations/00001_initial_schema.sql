@@ -384,15 +384,17 @@ CREATE INDEX idx_receipt_analyses_status ON receipt_analyses(profile_id, status)
 -- ─────────────────────────────────────────────────────────────────────────────
 -- handle_new_user: Auto-criar profile + ai_settings padrão ao registrar
 -- ─────────────────────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION handle_new_user() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, full_name, email)
-  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', ''), NEW.email);
-  -- Criar ai_settings padrão
-  INSERT INTO ai_settings (profile_id) VALUES (NEW.id);
+  INSERT INTO public.profiles (id, full_name, email)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', ''), COALESCE(NEW.email, ''));
+  INSERT INTO public.ai_settings (profile_id) VALUES (NEW.id);
+  RETURN NEW;
+EXCEPTION WHEN others THEN
+  RAISE LOG 'handle_new_user error: %', SQLERRM;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- update_invoice_on_payment: Auto-atualizar invoice ao registrar/remover payment
