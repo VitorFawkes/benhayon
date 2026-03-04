@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   Phone,
   DollarSign,
@@ -14,8 +16,21 @@ import {
   ChevronRight,
   Receipt,
   CheckCircle,
+  Pencil,
+  Send,
+  CreditCard,
+  ExternalLink,
+  Copy,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import PatientForm from '@/components/patients/PatientForm'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPhone, formatDate } from '@/lib/formatters'
 import { PATIENT_STATUS_COLORS } from '@/constants'
@@ -30,6 +45,8 @@ interface PatientCardProps {
 
 export default function PatientCard({ patient, index }: PatientCardProps) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [editOpen, setEditOpen] = useState(false)
 
   const now = new Date()
   const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
@@ -71,14 +88,16 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
     >
       <Card
         className={cn(
-          'cursor-pointer transition-all hover:shadow-elevated group overflow-hidden',
+          'transition-all hover:shadow-elevated group overflow-hidden',
           hasAlerts && 'ring-1 ring-warning/30',
         )}
-        onClick={() => navigate(`/patients/${patient.id}`)}
       >
         <CardContent className="p-0">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 pb-3">
+          {/* Header — clicável para detalhes */}
+          <div
+            className="flex items-center justify-between p-4 pb-3 cursor-pointer hover:bg-muted/40 transition-colors"
+            onClick={() => navigate(`/patients/${patient.id}`)}
+          >
             <div className="flex items-center gap-3 min-w-0">
               <div className={cn(
                 'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
@@ -160,8 +179,163 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
               </div>
             </div>
           )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1 p-2.5 border-t border-border">
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 text-success hover:text-success hover:bg-success-light flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const phone = patient.phone.replace(/\D/g, '')
+                      window.open(`https://wa.me/${phone}`, '_blank')
+                    }}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    WhatsApp
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Abrir WhatsApp</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary-light flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate('/agenda')
+                    }}
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    Agendar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Agendar sessão</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 text-warning hover:text-warning hover:bg-warning-light flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate('/billing')
+                    }}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Cobrar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Criar cobrança</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-2.5 text-xs gap-1.5 flex-1',
+                      patient.ai_enabled
+                        ? 'text-primary hover:text-primary hover:bg-primary-light'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      try {
+                        await supabase
+                          .from('patients')
+                          .update({ ai_enabled: !patient.ai_enabled })
+                          .eq('id', patient.id)
+                        queryClient.invalidateQueries({ queryKey: ['patients'] })
+                        toast.success(patient.ai_enabled ? 'IA desativada' : 'IA ativada')
+                      } catch {
+                        toast.error('Erro ao alterar IA')
+                      }
+                    }}
+                  >
+                    {patient.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <BotOff className="h-3.5 w-3.5" />}
+                    {patient.ai_enabled ? 'IA On' : 'IA Off'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{patient.ai_enabled ? 'Desativar IA' : 'Ativar IA'}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditOpen(true)
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Editar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Editar paciente</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigator.clipboard.writeText(patient.phone)
+                      toast.success('Telefone copiado')
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copiar telefone</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary-light flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/patients/${patient.id}`)
+                    }}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Detalhes
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Ver detalhes completos</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Edit dialog */}
+      <PatientForm
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        mode="edit"
+        patient={patient}
+      />
     </motion.div>
   )
 }

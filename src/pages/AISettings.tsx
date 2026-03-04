@@ -274,26 +274,6 @@ export default function AISettings() {
             <Toggle checked={local.analyze_receipts} onChange={(v) => update('analyze_receipts', v)} />
           </div>
 
-          {local.analyze_receipts && (
-            <div className="pl-4 border-l-2 border-primary/20">
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                Confiança para auto-confirmar ({Math.round(local.receipt_auto_confirm_threshold * 100)}%)
-              </label>
-              <input
-                type="range"
-                min={0.5}
-                max={1}
-                step={0.05}
-                value={local.receipt_auto_confirm_threshold}
-                onChange={(e) => update('receipt_auto_confirm_threshold', parseFloat(e.target.value))}
-                className="w-full accent-primary"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>50% (mais alertas)</span>
-                <span>100% (sempre manual)</span>
-              </div>
-            </div>
-          )}
 
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
             <div className="flex items-center gap-3">

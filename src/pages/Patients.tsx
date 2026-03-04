@@ -68,7 +68,7 @@ export default function Patients() {
 
       {/* Loading */}
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
@@ -108,7 +108,7 @@ export default function Patients() {
 
       {/* Patient grid */}
       {!isLoading && resultCount > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {patients!.map((patient, index) => (
             <PatientCard key={patient.id} patient={patient} index={index} />
           ))}
