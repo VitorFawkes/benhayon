@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format, addMinutes, parse } from 'date-fns'
+import { format, addMinutes, addWeeks, addDays, parse } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 
 import {
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -26,8 +28,9 @@ import {
 } from '@/components/ui/select'
 import { usePatients } from '@/hooks/usePatients'
 import { useCreateAppointment, useUpdateAppointment, useDeleteAppointment } from '@/hooks/useAppointments'
-import { APPOINTMENT_STATUS_LABELS } from '@/constants'
-import type { Appointment, AppointmentStatus } from '@/types'
+import { useCreateRecurringSchedule } from '@/hooks/useRecurringSchedules'
+import { APPOINTMENT_STATUS_LABELS, DAY_OF_WEEK_LABELS } from '@/constants'
+import type { Appointment, AppointmentStatus, RecurringFrequency } from '@/types'
 
 // ─── Schema ───
 
@@ -44,6 +47,14 @@ const appointmentSchema = z.object({
 )
 
 type AppointmentFormData = z.infer<typeof appointmentSchema>
+
+// ─── Frequency labels ───
+
+const FREQUENCY_LABELS: Record<RecurringFrequency, string> = {
+  weekly: 'Semanal',
+  biweekly: 'Quinzenal',
+  monthly: 'Mensal',
+}
 
 // ─── Props ───
 
@@ -64,11 +75,17 @@ export function AppointmentForm({
 }: AppointmentFormProps) {
   const isEdit = !!appointment
   const [patientSearch, setPatientSearch] = useState('')
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [frequency, setFrequency] = useState<RecurringFrequency>('weekly')
+  const [dayOfWeek, setDayOfWeek] = useState(1)
+  const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
 
   const { data: patients = [] } = usePatients({ status: 'active', search: patientSearch })
   const createMutation = useCreateAppointment()
   const updateMutation = useUpdateAppointment()
   const deleteMutation = useDeleteAppointment()
+  const createRecurringMutation = useCreateRecurringSchedule()
 
   const defaultEndTime = useMemo(() => {
     const time = defaultTime || '09:00'
@@ -126,19 +143,66 @@ export function AppointmentForm({
           status: appointment.status,
           notes: appointment.notes,
         })
+        setIsRecurring(false)
       } else {
+        const dateStr = defaultDate || format(new Date(), 'yyyy-MM-dd')
         reset({
           patient_id: '',
-          date: defaultDate || format(new Date(), 'yyyy-MM-dd'),
+          date: dateStr,
           start_time: defaultTime || '09:00',
           end_time: defaultEndTime,
           status: 'scheduled',
           notes: null,
         })
+        setIsRecurring(false)
+        setFrequency('weekly')
+        setDayOfWeek(new Date(dateStr).getDay())
+        setStartsAt(dateStr)
+        setEndsAt('')
       }
       setPatientSearch('')
     }
   }, [open, appointment, defaultDate, defaultTime, defaultEndTime, reset])
+
+  // Update day_of_week when date changes (for single appointment → recurring context)
+  const watchedDate = watch('date')
+  useEffect(() => {
+    if (watchedDate && !isEdit) {
+      const d = new Date(watchedDate)
+      if (!isNaN(d.getTime())) {
+        setDayOfWeek(d.getDay())
+        setStartsAt(watchedDate)
+      }
+    }
+  }, [watchedDate, isEdit])
+
+  // Preview for recurring mode
+  const preview = useMemo(() => {
+    if (!isRecurring || !startsAt) return null
+
+    const stepWeeks = frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4
+
+    let current = new Date(startsAt)
+    while (current.getDay() !== dayOfWeek) {
+      current = addDays(current, 1)
+    }
+
+    const totalWeeks = 8
+    let count = 0
+    let lastDate = current
+
+    for (let i = 0; i < totalWeeks; i++) {
+      const date = addWeeks(current, i * stepWeeks)
+      if (endsAt && date > new Date(endsAt)) break
+      count++
+      lastDate = date
+    }
+
+    return {
+      count,
+      lastDate: format(lastDate, "dd/MM/yyyy", { locale: ptBR }),
+    }
+  }, [isRecurring, frequency, startsAt, endsAt, dayOfWeek])
 
   async function onSubmit(data: AppointmentFormData) {
     try {
@@ -153,6 +217,19 @@ export function AppointmentForm({
           notes: data.notes || null,
         })
         toast.success('Agendamento atualizado com sucesso')
+      } else if (isRecurring) {
+        const result = await createRecurringMutation.mutateAsync({
+          patient_id: data.patient_id,
+          day_of_week: dayOfWeek,
+          start_time: data.start_time,
+          end_time: data.end_time,
+          frequency,
+          starts_at: startsAt,
+          ends_at: endsAt || null,
+        })
+        toast.success(
+          `Recorrência criada com ${result.appointmentsCreated} agendamentos`
+        )
       } else {
         await createMutation.mutateAsync({
           patient_id: data.patient_id,
@@ -234,14 +311,16 @@ export function AppointmentForm({
             )}
           </div>
 
-          {/* Data */}
-          <div className="space-y-2">
-            <Label htmlFor="date">Data</Label>
-            <Input type="date" {...register('date')} />
-            {errors.date && (
-              <p className="text-xs text-destructive">{errors.date.message}</p>
-            )}
-          </div>
+          {/* Data (apenas modo único) */}
+          {!isRecurring && (
+            <div className="space-y-2">
+              <Label htmlFor="date">Data</Label>
+              <Input type="date" {...register('date')} />
+              {errors.date && (
+                <p className="text-xs text-destructive">{errors.date.message}</p>
+              )}
+            </div>
+          )}
 
           {/* Horários */}
           <div className="grid grid-cols-2 gap-4">
@@ -260,6 +339,101 @@ export function AppointmentForm({
               )}
             </div>
           </div>
+
+          {/* Toggle Recorrente (apenas no modo criação) */}
+          {!isEdit && (
+            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+              <div>
+                <Label htmlFor="recurring-toggle" className="text-sm font-medium">
+                  Recorrente
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Criar agendamentos automaticamente
+                </p>
+              </div>
+              <Switch
+                id="recurring-toggle"
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
+            </div>
+          )}
+
+          {/* Campos de recorrência */}
+          {!isEdit && isRecurring && (
+            <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              {/* Dia da semana */}
+              <div className="space-y-2">
+                <Label>Dia da Semana</Label>
+                <Select
+                  value={String(dayOfWeek)}
+                  onValueChange={(value) => setDayOfWeek(Number(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAY_OF_WEEK_LABELS.map((label, index) => (
+                      <SelectItem key={index} value={String(index)}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Frequência */}
+              <div className="space-y-2">
+                <Label>Frequência</Label>
+                <Select
+                  value={frequency}
+                  onValueChange={(value) => setFrequency(value as RecurringFrequency)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(FREQUENCY_LABELS) as [RecurringFrequency, string][]).map(
+                      ([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Datas de início e término */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>A partir de</Label>
+                  <Input
+                    type="date"
+                    value={startsAt}
+                    onChange={(e) => setStartsAt(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Até</Label>
+                  <Input
+                    type="date"
+                    value={endsAt}
+                    onChange={(e) => setEndsAt(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Opcional</p>
+                </div>
+              </div>
+
+              {/* Preview */}
+              {preview && preview.count > 0 && (
+                <p className="text-sm text-foreground">
+                  Serão criados <strong>{preview.count} agendamentos</strong> até{' '}
+                  <strong>{preview.lastDate}</strong>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Status (apenas no modo edição) */}
           {isEdit && (
@@ -314,7 +488,13 @@ export function AppointmentForm({
               Cancelar
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : isEdit ? 'Salvar' : 'Criar'}
+              {isSubmitting
+                ? 'Salvando...'
+                : isEdit
+                  ? 'Salvar'
+                  : isRecurring
+                    ? 'Criar Recorrência'
+                    : 'Criar'}
             </Button>
           </DialogFooter>
         </form>

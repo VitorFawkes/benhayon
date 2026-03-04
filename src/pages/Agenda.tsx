@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  CalendarClock,
   Calendar as CalendarIcon,
   LayoutGrid,
   List,
@@ -32,7 +31,6 @@ import { DayView } from '@/components/agenda/DayView'
 import { WeekView } from '@/components/agenda/WeekView'
 import { MonthView } from '@/components/agenda/MonthView'
 import { AppointmentForm } from '@/components/agenda/AppointmentForm'
-import { RecurringForm } from '@/components/agenda/RecurringForm'
 import { cn } from '@/lib/utils'
 import type { Appointment } from '@/types'
 
@@ -49,7 +47,6 @@ export default function Agenda() {
 
   // Dialog states
   const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
-  const [recurringFormOpen, setRecurringFormOpen] = useState(false)
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
   const [defaultFormDate, setDefaultFormDate] = useState<string>('')
   const [defaultFormTime, setDefaultFormTime] = useState<string>('')
@@ -212,10 +209,6 @@ export default function Agenda() {
           </div>
 
           {/* Action buttons */}
-          <Button variant="outline" size="sm" onClick={() => setRecurringFormOpen(true)} className="h-8">
-            <CalendarClock className="w-4 h-4" />
-            <span className="hidden sm:inline ml-1">Recorrência</span>
-          </Button>
           <Button size="sm" onClick={handleNewAppointment} className="h-8">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline ml-1">Novo Agendamento</span>
@@ -277,10 +270,6 @@ export default function Agenda() {
         defaultTime={defaultFormTime}
       />
 
-      <RecurringForm
-        open={recurringFormOpen}
-        onOpenChange={setRecurringFormOpen}
-      />
     </motion.div>
   )
 }
