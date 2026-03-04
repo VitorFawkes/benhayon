@@ -369,7 +369,12 @@ async function analyzeReceipt(imageUrl: string): Promise<{
   // Download image as base64
   const imageResponse = await fetch(imageUrl)
   const imageBuffer = await imageResponse.arrayBuffer()
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)))
+  const bytes = new Uint8Array(imageBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  const base64 = btoa(binary)
   const mediaType = imageResponse.headers.get('content-type') || 'image/jpeg'
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
