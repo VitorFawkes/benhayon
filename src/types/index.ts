@@ -201,44 +201,40 @@ export interface Alert {
 export interface AISettings {
   id: string
   profile_id: string
+  // Cobrança
   billing_enabled: boolean
   billing_day: number
   billing_due_days: number
   billing_tone: AITone
   billing_template: string
+  // Lembretes
   reminder_enabled: boolean
   reminder_day: number
-  reminder_1_days: number
   reminder_1_tone: AITone
   reminder_1_template: string
-  reminder_2_days: number
-  reminder_2_enabled: boolean
-  reminder_2_tone: AITone
-  reminder_2_template: string
-  reminder_3_days: number
-  reminder_3_enabled: boolean
-  reminder_3_tone: AITone
-  reminder_3_template: string
   reminder_repeat_enabled: boolean
   reminder_repeat_interval_days: number
   reminder_max_count: number
+  // Agradecimento
   thank_you_enabled: boolean
   thank_you_tone: AITone
   thank_you_template: string
+  // Lembrete de sessão
   appointment_reminder_enabled: boolean
   appointment_reminder_hours_before: number
   appointment_reminder_tone: AITone
   appointment_reminder_template: string
+  // Processamento de mídia
   analyze_receipts: boolean
-  receipt_auto_confirm_threshold: number
   analyze_audio: boolean
   analyze_text_intent: boolean
+  // Horários
   send_start_hour: number
   send_end_hour: number
   send_on_weekends: boolean
-  send_on_holidays: boolean
   min_seconds_between_messages: number
   max_messages_per_hour: number
+  // Meta
   created_at: string
   updated_at: string
 }

@@ -121,17 +121,14 @@ export function useInvoicePreview(month: Date | null) {
       // Buscar configurações de cobrança
       const { data: aiSettings } = await supabase
         .from('ai_settings')
-        .select('billing_day, billing_due_days')
+        .select('billing_day, reminder_day')
         .eq('profile_id', user.id)
         .single()
 
-      const billingDueDays = aiSettings?.billing_due_days ?? 10
-      const billingDay = aiSettings?.billing_day ?? 5
+      const reminderDay = aiSettings?.reminder_day ?? 10
 
-      // Calcular data de vencimento: mês seguinte ao referência + billing_day + billing_due_days
-      const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, billingDay)
-      const dueDate = new Date(nextMonth)
-      dueDate.setDate(dueDate.getDate() + billingDueDays)
+      // Due date = reminder_day do mês seguinte ao referência (prazo = dia do lembrete)
+      const dueDate = new Date(month.getFullYear(), month.getMonth() + 1, reminderDay)
       const dueDateStr = format(dueDate, 'yyyy-MM-dd')
 
       // Agrupar por paciente

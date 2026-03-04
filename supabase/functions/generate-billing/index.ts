@@ -45,7 +45,7 @@ serve(async () => {
 
 async function generateMonthlyInvoices(settings: Record<string, unknown>) {
   const profileId = settings.profile_id as string
-  const billingDueDays = (settings.billing_due_days as number) || 10
+  const reminderDay = (settings.reminder_day as number) || 10
 
   // Previous month
   const now = new Date()
@@ -76,8 +76,8 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
     }
   }
 
-  const dueDate = new Date(now)
-  dueDate.setDate(dueDate.getDate() + billingDueDays)
+  // Due date = reminder_day of current month (when reminders start = payment deadline)
+  const dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
 
   for (const [patientId, { count, patient }] of patientMap) {
     const sessionValue = Number(patient.session_value) || 0

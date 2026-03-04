@@ -106,31 +106,17 @@ export default function AISettings() {
         enabled={local.billing_enabled}
         onEnabledChange={(v) => update('billing_enabled', v)}
       >
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Dia da cobrança</label>
-            <input
-              type="number"
-              min={1}
-              max={28}
-              value={local.billing_day}
-              onChange={(e) => update('billing_day', safeParseInt(e.target.value, local.billing_day))}
-              className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Dia do mês para gerar cobranças</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Dias para vencimento</label>
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={local.billing_due_days}
-              onChange={(e) => update('billing_due_days', safeParseInt(e.target.value, local.billing_due_days))}
-              className="w-full h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Dias após envio para vencer</p>
-          </div>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-foreground mb-1.5">Dia da cobrança</label>
+          <input
+            type="number"
+            min={1}
+            max={28}
+            value={local.billing_day}
+            onChange={(e) => update('billing_day', safeParseInt(e.target.value, local.billing_day))}
+            className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Dia do mês para gerar e enviar cobranças</p>
         </div>
         <ToneSelector value={local.billing_tone} onChange={(v) => update('billing_tone', v)} />
         <TemplateEditor
