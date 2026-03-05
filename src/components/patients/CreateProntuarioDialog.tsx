@@ -50,7 +50,8 @@ export default function CreateProntuarioDialog({
     const apt = appointments?.find((a) => a.id === appointmentId)
     if (!apt) return
     onOpenChange(false)
-    onSelectTarget(appointmentToTarget(apt))
+    // Small delay so Radix close animation finishes before opening the next dialog
+    setTimeout(() => onSelectTarget(appointmentToTarget(apt)), 150)
   }
 
   return (

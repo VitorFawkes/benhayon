@@ -102,6 +102,7 @@ export function useUpsertSessionNote() {
       queryClient.invalidateQueries({ queryKey: sessionNoteKeys.detail(data.appointment_id) })
       queryClient.invalidateQueries({ queryKey: sessionNoteKeys.all })
       queryClient.invalidateQueries({ queryKey: ['session-note-previous'] })
+      queryClient.invalidateQueries({ queryKey: ['appointments', 'completed-without-notes'] })
     },
     onError: (error) => {
       toast.error('Erro ao salvar prontuário', { description: error.message })
