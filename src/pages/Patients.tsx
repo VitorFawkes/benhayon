@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Users, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
-import { subMonths, addMonths, format, startOfMonth, endOfMonth } from 'date-fns'
+import { Plus, Users, Upload, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { subMonths, addMonths, format, isSameMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,9 +21,7 @@ export default function Patients() {
   const [typeFilter, setTypeFilter] = useState<PatientPaymentType | null>(null)
   const [selectedMonth, setSelectedMonth] = useState(new Date())
 
-  const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd')
-  const monthLabel = format(selectedMonth, 'MMMM yyyy', { locale: ptBR })
+  const isCurrentMonth = isSameMonth(selectedMonth, new Date())
 
   // Debounce search
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -68,35 +66,8 @@ export default function Patients() {
         </div>
       </div>
 
-      {/* Month selector */}
-      <div className="flex items-center gap-2 mb-4">
-        <button
-          onClick={() => setSelectedMonth((m) => subMonths(m, 1))}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-sm font-medium text-foreground capitalize min-w-[120px] text-center">
-          {monthLabel}
-        </span>
-        <button
-          onClick={() => setSelectedMonth((m) => addMonths(m, 1))}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-        {format(selectedMonth, 'yyyy-MM') !== format(new Date(), 'yyyy-MM') && (
-          <button
-            onClick={() => setSelectedMonth(new Date())}
-            className="text-xs text-primary hover:underline ml-1"
-          >
-            Mês atual
-          </button>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="mb-6">
+      {/* Filters + Month selector */}
+      <div className="mb-6 space-y-4">
         <PatientFilters
           search={search}
           onSearchChange={handleSearchChange}
@@ -106,6 +77,43 @@ export default function Patients() {
           onPaymentTypeChange={setTypeFilter}
           resultCount={resultCount}
         />
+
+        {/* Month selector — integrado com filtros */}
+        <div className="flex items-center gap-1">
+          <span className="text-sm text-muted-foreground mr-1 flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Período:
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => setSelectedMonth((m) => subMonths(m, 1))}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-sm font-medium text-foreground capitalize min-w-[130px] text-center">
+            {format(selectedMonth, 'MMMM yyyy', { locale: ptBR })}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => setSelectedMonth((m) => addMonths(m, 1))}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+          {!isCurrentMonth && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-primary"
+              onClick={() => setSelectedMonth(new Date())}
+            >
+              Hoje
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Loading */}
@@ -152,7 +160,12 @@ export default function Patients() {
       {!isLoading && resultCount > 0 && (
         <div className="grid grid-cols-1 gap-4">
           {patients!.map((patient, index) => (
-            <PatientCard key={patient.id} patient={patient} index={index} monthStart={monthStart} monthEnd={monthEnd} monthLabel={monthLabel} />
+            <PatientCard
+              key={patient.id}
+              patient={patient}
+              index={index}
+              referenceMonth={selectedMonth}
+            />
           ))}
         </div>
       )}

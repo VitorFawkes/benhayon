@@ -35,39 +35,111 @@ import { formatCurrency, formatPhone, formatDate } from '@/lib/formatters'
 import { PATIENT_STATUS_COLORS } from '@/constants'
 import { supabase } from '@/lib/supabase'
 import type { Patient } from '@/types'
-import { format } from 'date-fns'
+import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 interface PatientCardProps {
   patient: Patient
   index: number
-  monthStart: string
-  monthEnd: string
-  monthLabel: string
+  referenceMonth: Date
 }
 
-export default function PatientCard({ patient, index, monthStart, monthEnd, monthLabel }: PatientCardProps) {
+export default function PatientCard({ patient, index, referenceMonth }: PatientCardProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editOpen, setEditOpen] = useState(false)
 
+  // Derivar datas do mês selecionado
+  const monthStart = format(startOfMonth(referenceMonth), 'yyyy-MM-dd')
+  const monthEnd = format(endOfMonth(referenceMonth), 'yyyy-MM-dd')
+  const referenceMonthStr = format(startOfMonth(referenceMonth), 'yyyy-MM-dd')
+  const monthShortLabel = format(referenceMonth, 'MMM', { locale: ptBR })
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const { data: stats } = useQuery({
     queryKey: ['patient-card-stats', patient.id, monthStart],
     queryFn: async () => {
-      const [nextApt, monthSessions, noShows, pending, unread, receipts] = await Promise.all([
-        supabase.from('appointments').select('date, start_time').eq('patient_id', patient.id).eq('status', 'scheduled').gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle(),
-        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('patient_id', patient.id).eq('status', 'completed').gte('date', monthStart).lte('date', monthEnd),
-        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('patient_id', patient.id).eq('status', 'no_show').gte('date', monthStart).lte('date', monthEnd),
-        supabase.from('invoices').select('total_amount, amount_paid').eq('patient_id', patient.id).in('status', ['pending', 'partial', 'overdue']),
-        supabase.from('message_logs').select('id', { count: 'exact', head: true }).eq('patient_id', patient.id).eq('direction', 'inbound').eq('ai_processed', false),
-        supabase.from('receipt_analyses').select('id', { count: 'exact', head: true }).eq('patient_id', patient.id).eq('status', 'pending_review'),
+      const [
+        nextApt,
+        monthSessions,
+        noShows,
+        monthInvoice,
+        unread,
+        receipts,
+      ] = await Promise.all([
+        // Próxima consulta agendada (sempre a partir de hoje)
+        supabase
+          .from('appointments')
+          .select('date, start_time')
+          .eq('patient_id', patient.id)
+          .eq('status', 'scheduled')
+          .gte('date', today)
+          .order('date', { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+
+        // Sessões completadas no mês selecionado
+        supabase
+          .from('appointments')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patient.id)
+          .eq('status', 'completed')
+          .gte('date', monthStart)
+          .lte('date', monthEnd),
+
+        // Faltas no mês selecionado
+        supabase
+          .from('appointments')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patient.id)
+          .eq('status', 'no_show')
+          .gte('date', monthStart)
+          .lte('date', monthEnd),
+
+        // Fatura do mês selecionado (filtrada por reference_month)
+        supabase
+          .from('invoices')
+          .select('total_amount, amount_paid, status')
+          .eq('patient_id', patient.id)
+          .eq('reference_month', referenceMonthStr)
+          .maybeSingle(),
+
+        // Mensagens não lidas (tempo real, não depende do mês)
+        supabase
+          .from('message_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patient.id)
+          .eq('direction', 'inbound')
+          .eq('ai_processed', false),
+
+        // Comprovantes pendentes (tempo real, não depende do mês)
+        supabase
+          .from('receipt_analyses')
+          .select('id', { count: 'exact', head: true })
+          .eq('patient_id', patient.id)
+          .eq('status', 'pending_review'),
       ])
-      const pendingAmount = pending.data?.reduce((s, i) => s + (Number(i.total_amount) - Number(i.amount_paid)), 0) || 0
+
+      // Calcular pendente da fatura do mês
+      const invoice = monthInvoice.data
+      let pendingStatus: 'no_invoice' | 'paid' | 'pending' = 'no_invoice'
+      let pendingAmount = 0
+
+      if (invoice) {
+        const remaining = Number(invoice.total_amount) - Number(invoice.amount_paid)
+        if (invoice.status === 'paid' || remaining <= 0) {
+          pendingStatus = 'paid'
+        } else {
+          pendingStatus = 'pending'
+          pendingAmount = remaining
+        }
+      }
+
       return {
         nextAppointment: nextApt.data,
         monthSessions: monthSessions.count || 0,
         noShows: noShows.count || 0,
+        pendingStatus,
         pendingAmount,
         unreadMessages: unread.count || 0,
         pendingReceipts: receipts.count || 0,
@@ -77,7 +149,7 @@ export default function PatientCard({ patient, index, monthStart, monthEnd, mont
   })
 
   const hasAlerts = (stats?.unreadMessages || 0) > 0 || (stats?.pendingReceipts || 0) > 0
-  const hasPending = (stats?.pendingAmount || 0) > 0
+  const hasPending = stats?.pendingStatus === 'pending'
 
   return (
     <motion.div
@@ -133,6 +205,7 @@ export default function PatientCard({ patient, index, monthStart, monthEnd, mont
           {/* Stats Row */}
           {stats && (
             <div className="grid grid-cols-4 gap-px bg-border/50 border-t border-border">
+              {/* Próxima consulta — sempre a partir de hoje */}
               <div className="bg-surface p-2.5 text-center">
                 <Calendar className="h-3.5 w-3.5 mx-auto text-primary/60 mb-1" />
                 <p className="text-[10px] text-muted-foreground">Próxima</p>
@@ -140,21 +213,42 @@ export default function PatientCard({ patient, index, monthStart, monthEnd, mont
                   {stats.nextAppointment ? formatDate(stats.nextAppointment.date, 'dd/MM') : '—'}
                 </p>
               </div>
+
+              {/* Sessões do mês selecionado */}
               <div className="bg-surface p-2.5 text-center">
                 <Clock className="h-3.5 w-3.5 mx-auto text-secondary/60 mb-1" />
-                <p className="text-[10px] text-muted-foreground capitalize">Sessões <span className="opacity-70">({monthLabel.split(' ')[0]?.slice(0, 3)})</span></p>
+                <p className="text-[10px] text-muted-foreground capitalize">
+                  Sessões <span className="text-[9px] opacity-60">({monthShortLabel})</span>
+                </p>
                 <p className="text-xs font-medium text-foreground">
                   {stats.monthSessions}
-                  {stats.noShows > 0 && <span className="text-destructive ml-1">({stats.noShows} falta{stats.noShows > 1 ? 's' : ''})</span>}
+                  {stats.noShows > 0 && (
+                    <span className="text-destructive ml-1">
+                      ({stats.noShows} falta{stats.noShows > 1 ? 's' : ''})
+                    </span>
+                  )}
                 </p>
               </div>
+
+              {/* Pendente do mês selecionado */}
               <div className="bg-surface p-2.5 text-center">
-                <Receipt className={cn('h-3.5 w-3.5 mx-auto mb-1', hasPending ? 'text-warning' : 'text-success/60')} />
-                <p className="text-[10px] text-muted-foreground">Pendente</p>
+                <Receipt className={cn(
+                  'h-3.5 w-3.5 mx-auto mb-1',
+                  hasPending ? 'text-warning' : 'text-success/60',
+                )} />
+                <p className="text-[10px] text-muted-foreground capitalize">
+                  Pendente <span className="text-[9px] opacity-60">({monthShortLabel})</span>
+                </p>
                 <p className={cn('text-xs font-medium', hasPending ? 'text-warning' : 'text-success')}>
-                  {hasPending ? formatCurrency(stats.pendingAmount) : 'Em dia'}
+                  {stats.pendingStatus === 'no_invoice'
+                    ? '—'
+                    : stats.pendingStatus === 'paid'
+                      ? 'Pago'
+                      : formatCurrency(stats.pendingAmount)}
                 </p>
               </div>
+
+              {/* Alertas — tempo real, não depende do mês */}
               <div className="bg-surface p-2.5 text-center">
                 {stats.pendingReceipts > 0 ? (
                   <>
