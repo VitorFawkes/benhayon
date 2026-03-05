@@ -16,7 +16,6 @@ import {
   FileUp,
   Loader2,
   Phone,
-  FileImage,
   FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
