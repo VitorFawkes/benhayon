@@ -80,8 +80,14 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
     }
   }
 
-  // Due date = reminder_day of current month (when reminders start = payment deadline)
-  const dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
+  // Due date = reminder_day. If reminder_day <= billing_day, push to next month
+  const billingDay = (settings.billing_day as number) || 5
+  let dueDate: Date
+  if (reminderDay <= billingDay) {
+    dueDate = new Date(now.getFullYear(), now.getMonth() + 1, reminderDay)
+  } else {
+    dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
+  }
 
   for (const [patientId, { count, dates, patient }] of patientMap) {
     const sessionValue = Number(patient.session_value) || 0
@@ -89,24 +95,37 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
 
     if (totalAmount <= 0) continue
 
-    // Idempotent: skip if invoice already exists (race-safe via ignoreDuplicates)
-    const { data: invoice } = await supabase
+    // Check if invoice already exists (may have been created manually from frontend)
+    const { data: existingInvoice } = await supabase
       .from('invoices')
-      .upsert(
-        {
+      .select('id, sent_at')
+      .eq('profile_id', profileId)
+      .eq('patient_id', patientId)
+      .eq('reference_month', referenceMonth)
+      .maybeSingle()
+
+    let invoiceId: string
+
+    if (existingInvoice) {
+      if (existingInvoice.sent_at) continue // Already sent billing message
+      invoiceId = existingInvoice.id
+    } else {
+      const { data: newInvoice, error: insertError } = await supabase
+        .from('invoices')
+        .insert({
           profile_id: profileId,
           patient_id: patientId,
           reference_month: referenceMonth,
           total_sessions: count,
           total_amount: totalAmount,
           due_date: dueDate.toISOString().split('T')[0],
-        },
-        { onConflict: 'profile_id,patient_id,reference_month', ignoreDuplicates: true }
-      )
-      .select()
-      .single()
+        })
+        .select('id')
+        .single()
 
-    if (!invoice) continue
+      if (insertError || !newInvoice) continue
+      invoiceId = newInvoice.id
+    }
 
     // Check if AI is enabled for this patient before queuing message
     const { data: patientCheck } = await supabase
@@ -132,15 +151,15 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
         datas_sessoes: formattedDates,
       })
 
-      // Schedule within allowed hours
+      // Schedule within allowed hours (send_start_hour is in BRT, convert to UTC)
       const sendHour = (settings.send_start_hour as number) || 9
       const scheduledFor = new Date(now)
-      scheduledFor.setHours(sendHour, Math.floor(Math.random() * 60), 0) // Spread across the hour
+      scheduledFor.setUTCHours(sendHour + 3, Math.floor(Math.random() * 60), 0) // BRT+3 = UTC
 
       await supabase.from('message_queue').insert({
         profile_id: profileId,
         patient_id: patientId,
-        invoice_id: invoice.id,
+        invoice_id: invoiceId,
         message_type: 'billing',
         message_content: message,
         scheduled_for: scheduledFor.toISOString(),
@@ -151,7 +170,7 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
       await supabase
         .from('invoices')
         .update({ sent_at: new Date().toISOString() })
-        .eq('id', invoice.id)
+        .eq('id', invoiceId)
     }
   }
 }
@@ -167,9 +186,6 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
   const repeatInterval = (settings.reminder_repeat_interval_days as number) || 5
   const template = (settings.reminder_1_template as string) || ''
 
-  // Only start reminding from reminder_day onwards
-  if (todayDay < reminderDay) return
-
   // Get unpaid invoices
   const { data: unpaidInvoices } = await supabase
     .from('invoices')
@@ -180,6 +196,10 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
   if (!unpaidInvoices) return
 
   for (const invoice of unpaidInvoices) {
+    // Skip if invoice due_date hasn't arrived yet
+    const invoiceDueDate = new Date(invoice.due_date)
+    if (today < invoiceDueDate) continue
+
     const patient = invoice.patient as Record<string, unknown>
     const remaining = invoice.total_amount - invoice.amount_paid
 
@@ -230,7 +250,7 @@ async function generatePaymentReminders(settings: Record<string, unknown>) {
 
     const sendHour = (settings.send_start_hour as number) || 9
     const scheduledFor = new Date()
-    scheduledFor.setHours(sendHour, Math.floor(Math.random() * 60), 0)
+    scheduledFor.setUTCHours(sendHour + 3, Math.floor(Math.random() * 60), 0) // BRT+3 = UTC
 
     await supabase.from('message_queue').insert({
       profile_id: profileId,

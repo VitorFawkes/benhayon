@@ -132,9 +132,15 @@ export function useInvoicePreview(month: Date | null) {
         .single()
 
       const reminderDay = aiSettings?.reminder_day ?? 10
+      const billingDay = aiSettings?.billing_day ?? 5
 
-      // Due date = reminder_day do mês seguinte ao referência (prazo = dia do lembrete)
-      const dueDate = new Date(month.getFullYear(), month.getMonth() + 1, reminderDay)
+      // Due date = reminder_day. Se reminder_day <= billing_day, vai para 2 meses após referência
+      let dueDate: Date
+      if (reminderDay <= billingDay) {
+        dueDate = new Date(month.getFullYear(), month.getMonth() + 2, reminderDay)
+      } else {
+        dueDate = new Date(month.getFullYear(), month.getMonth() + 1, reminderDay)
+      }
       const dueDateStr = format(dueDate, 'yyyy-MM-dd')
 
       // Agrupar por paciente

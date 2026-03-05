@@ -181,7 +181,10 @@ export default function AISettings() {
             onChange={(e) => update('reminder_day', safeParseInt(e.target.value, local.reminder_day))}
             className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
           />
-          <p className="text-xs text-muted-foreground mt-1">Dia do mês para enviar o primeiro lembrete</p>
+          <p className="text-xs text-muted-foreground mt-1">Dia do mês para enviar o primeiro lembrete (= vencimento da fatura)</p>
+          {local.reminder_day <= local.billing_day && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">O dia do lembrete ({local.reminder_day}) é antes do dia da cobrança ({local.billing_day}). O vencimento será no mês seguinte.</p>
+          )}
         </div>
 
         <ToneSelector value={local.reminder_1_tone} onChange={(v) => update('reminder_1_tone', v)} />

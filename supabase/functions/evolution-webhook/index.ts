@@ -24,6 +24,8 @@ serve(async (req) => {
     const event = payload.event || payload.type
     const instance = payload.instance || payload.instanceName
 
+    console.log(`[webhook] event=${event} instance=${instance}`)
+
     // Handle CONNECTION_UPDATE
     if (event === 'CONNECTION_UPDATE' || event === 'connection.update') {
       const state = payload.data?.state || payload.state
@@ -69,109 +71,125 @@ serve(async (req) => {
       const messages = payload.data || [payload]
 
       for (const msg of Array.isArray(messages) ? messages : [messages]) {
-        const key = msg.key || {}
-        const messageData = msg.message || {}
+        try {
+          const key = msg.key || {}
+          const messageData = msg.message || {}
 
-        // Skip outgoing messages (fromMe = true)
-        if (key.fromMe) continue
+          // Skip outgoing messages (fromMe = true)
+          if (key.fromMe) continue
 
-        // Extract sender phone — ONLY direct messages from individual chats
-        const remoteJid = key.remoteJid || ''
+          // Extract sender phone — ONLY direct messages from individual chats
+          const remoteJid = key.remoteJid || ''
 
-        // Reject group messages immediately
-        if (remoteJid.includes('@g.us')) {
-          console.log('Ignoring group message')
-          continue
-        }
+          // Reject group messages immediately
+          if (remoteJid.includes('@g.us')) {
+            console.log(`[webhook] skip group: ${remoteJid}`)
+            continue
+          }
 
-        const senderPhone = remoteJid.replace('@s.whatsapp.net', '')
-        if (!senderPhone) continue
+          const senderPhone = remoteJid.replace('@s.whatsapp.net', '')
+          if (!senderPhone) continue
 
-        // Validate phone format before DB lookup
-        const normalizedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`
-        if (!/^\+\d{12,13}$/.test(normalizedPhone)) {
-          console.log(`Ignoring invalid phone format: ${normalizedPhone}`)
-          continue
-        }
+          // Validate phone format before DB lookup
+          const normalizedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`
+          if (!/^\+\d{12,13}$/.test(normalizedPhone)) {
+            console.log(`[webhook] skip invalid phone: ${normalizedPhone}`)
+            continue
+          }
 
-        // Determine message type
-        let messageType = 'text'
-        let content = ''
-        const messageId = key.id || `${Date.now()}_${senderPhone}`
+          // Determine message type
+          let messageType = 'text'
+          let content = ''
+          const messageId = key.id || `${Date.now()}_${senderPhone}`
 
-        if (messageData.conversation) {
-          messageType = 'text'
-          content = messageData.conversation
-        } else if (messageData.extendedTextMessage) {
-          messageType = 'text'
-          content = messageData.extendedTextMessage.text || ''
-        } else if (messageData.audioMessage) {
-          messageType = 'audio'
-        } else if (messageData.imageMessage) {
-          messageType = 'image'
-        } else if (messageData.documentMessage) {
-          messageType = 'document'
-        } else {
-          // Unknown type, skip
-          continue
-        }
+          if (messageData.conversation) {
+            messageType = 'text'
+            content = messageData.conversation
+          } else if (messageData.extendedTextMessage) {
+            messageType = 'text'
+            content = messageData.extendedTextMessage.text || ''
+          } else if (messageData.audioMessage) {
+            messageType = 'audio'
+          } else if (messageData.imageMessage) {
+            messageType = 'image'
+          } else if (messageData.documentMessage) {
+            messageType = 'document'
+          } else {
+            console.log(`[webhook] skip unknown message type from ${normalizedPhone}`)
+            continue
+          }
 
-        // Find which profile this instance belongs to
-        const { data: inst } = await supabase
-          .from('whatsapp_instances')
-          .select('profile_id')
-          .eq('instance_name', instance)
-          .single()
+          console.log(`[webhook] processing ${messageType} from ${normalizedPhone} (msgId=${messageId})`)
 
-        if (!inst) continue
+          // Find which profile this instance belongs to
+          const { data: inst, error: instError } = await supabase
+            .from('whatsapp_instances')
+            .select('profile_id')
+            .eq('instance_name', instance)
+            .single()
 
-        // Find patient by phone number — only save messages from known patients
-        const { data: patient } = await supabase
-          .from('patients')
-          .select('id')
-          .eq('profile_id', inst.profile_id)
-          .eq('phone', normalizedPhone)
-          .is('deleted_at', null)
-          .maybeSingle()
+          if (instError || !inst) {
+            console.error(`[webhook] instance not found: ${instance}`, instError?.message)
+            continue
+          }
 
-        // Skip messages from unknown numbers (not a patient)
-        if (!patient) {
-          console.log(`Ignoring message from unknown number: ${normalizedPhone}`)
-          continue
-        }
+          // Find patient by phone number — only save messages from known patients
+          const { data: patient, error: patientError } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('profile_id', inst.profile_id)
+            .eq('phone', normalizedPhone)
+            .is('deleted_at', null)
+            .maybeSingle()
 
-        // Insert message log (with deduplication)
-        const { data: messageLog, error: logError } = await supabase
-          .from('message_logs')
-          .upsert({
-            profile_id: inst.profile_id,
-            patient_id: patient.id,
-            direction: 'inbound',
-            message_type: messageType,
-            content: content || null,
-            raw_payload: payload,
-            external_message_id: messageId,
-            ai_processed: false,
-          }, {
-            onConflict: 'profile_id,external_message_id',
-            ignoreDuplicates: true,
-          })
-          .select()
-          .single()
+          if (patientError) {
+            console.error(`[webhook] patient lookup error for ${normalizedPhone}:`, patientError.message)
+            continue
+          }
 
-        if (logError) {
-          // Likely duplicate, skip
-          console.warn('Message log insert error (likely duplicate):', logError.message)
-          continue
-        }
+          // Skip messages from unknown numbers (not a patient)
+          if (!patient) {
+            console.log(`[webhook] skip unknown patient: ${normalizedPhone} (profile=${inst.profile_id})`)
+            continue
+          }
 
-        // Add to processing queue
-        if (messageLog) {
-          await supabase.from('processing_queue').insert({
-            profile_id: inst.profile_id,
-            message_log_id: messageLog.id,
-            status: 'pending',
-          })
+          // Insert message log (with deduplication)
+          const { data: messageLog, error: logError } = await supabase
+            .from('message_logs')
+            .upsert({
+              profile_id: inst.profile_id,
+              patient_id: patient.id,
+              direction: 'inbound',
+              message_type: messageType,
+              content: content || null,
+              raw_payload: payload,
+              external_message_id: messageId,
+              ai_processed: false,
+            }, {
+              onConflict: 'profile_id,external_message_id',
+              ignoreDuplicates: true,
+            })
+            .select()
+            .single()
+
+          if (logError) {
+            console.warn(`[webhook] insert error (msgId=${messageId}):`, logError.message)
+            continue
+          }
+
+          console.log(`[webhook] saved message ${messageLog?.id} from ${normalizedPhone}`)
+
+          // Add to processing queue
+          if (messageLog) {
+            await supabase.from('processing_queue').insert({
+              profile_id: inst.profile_id,
+              message_log_id: messageLog.id,
+              status: 'pending',
+            })
+          }
+        } catch (msgError) {
+          const errMsg = msgError instanceof Error ? msgError.message : 'Unknown error'
+          console.error(`[webhook] error processing message:`, errMsg)
         }
       }
 

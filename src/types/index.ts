@@ -269,6 +269,26 @@ export interface SessionNoteWithDetails extends SessionNote {
   appointment?: Pick<Appointment, 'id' | 'date' | 'start_time' | 'end_time' | 'status'>
 }
 
+export interface MessageQueueItem {
+  id: string
+  profile_id: string
+  patient_id: string
+  invoice_id: string | null
+  message_type: OutboundMessageType
+  message_content: string
+  scheduled_for: string
+  status: QueueStatus
+  attempts: number
+  max_attempts: number
+  last_error: string | null
+  sent_at: string | null
+  escalation_level: number
+  created_at: string
+  // Joins
+  patient?: Patient
+  invoice?: Invoice
+}
+
 // ─── Utility Types ───
 
 export interface DashboardStats {

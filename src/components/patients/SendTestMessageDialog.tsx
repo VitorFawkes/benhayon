@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { MessageSquare, Send, Loader2 } from 'lucide-react'
+import { MessageSquare, Send, Loader2, Info } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAISettings } from '@/hooks/useAISettings'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -61,59 +62,203 @@ export default function SendTestMessageDialog({
   const [messageType, setMessageType] = useState<MessageType>('billing')
   const [messageText, setMessageText] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [sessionsCount, setSessionsCount] = useState(0)
+  const [useRealData, setUseRealData] = useState(false)
+  const [realDataLoading, setRealDataLoading] = useState(false)
+  const [noDataMessage, setNoDataMessage] = useState<string | null>(null)
 
-  // Fetch session count for this patient in previous month
-  useEffect(() => {
-    if (!open || !patientId) return
-    const prevMonth = new Date()
-    prevMonth.setMonth(prevMonth.getMonth() - 1)
-    const monthStart = format(startOfMonth(prevMonth), 'yyyy-MM-dd')
-    const monthEnd = format(endOfMonth(prevMonth), 'yyyy-MM-dd')
-
-    supabase
-      .from('appointments')
-      .select('id', { count: 'exact', head: true })
-      .eq('patient_id', patientId)
-      .in('status', ['completed', 'cancelled'])
-      .gte('date', monthStart)
-      .lte('date', monthEnd)
-      .then(({ count }) => setSessionsCount(count ?? 0))
-  }, [open, patientId])
-
-  // Generate preview when type or settings change
+  // Generate preview when type, settings, or data mode change
   useEffect(() => {
     if (!aiSettings || !open) return
 
-    const now = new Date()
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-    const reminderDay = aiSettings.reminder_day ?? 10
-    const dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
-    const totalAmount = sessionsCount * sessionValue
+    let cancelled = false
 
-    const variables: Record<string, string> = {
-      nome: patientName,
-      valor: totalAmount.toFixed(2),
-      mes: monthName,
-      sessoes: String(sessionsCount),
-      vencimento: dueDate.toLocaleDateString('pt-BR'),
-      datas_sessoes: '',
-      data: format(now, "EEEE, d 'de' MMMM", { locale: ptBR }),
-      horario: format(now, 'HH:mm'),
+    async function generatePreview() {
+      setNoDataMessage(null)
+
+      if (useRealData) {
+        setRealDataLoading(true)
+        try {
+          await generateRealDataPreview()
+        } finally {
+          if (!cancelled) setRealDataLoading(false)
+        }
+      } else {
+        generateSimulatedPreview()
+      }
     }
 
-    let template = ''
-    if (messageType === 'billing') {
-      template = aiSettings.billing_template || ''
-    } else if (messageType === 'reminder') {
-      template = aiSettings.reminder_1_template || ''
-    } else if (messageType === 'appointment_reminder') {
-      template = aiSettings.appointment_reminder_template || ''
+    async function generateRealDataPreview() {
+      if (!aiSettings) return
+
+      if (messageType === 'billing') {
+        const prevMonth = new Date()
+        prevMonth.setMonth(prevMonth.getMonth() - 1)
+        const monthStart = format(startOfMonth(prevMonth), 'yyyy-MM-dd')
+        const monthEnd = format(endOfMonth(prevMonth), 'yyyy-MM-dd')
+
+        const billCancelled = aiSettings.bill_cancelled_sessions !== false
+        const statuses = billCancelled ? ['completed', 'cancelled'] : ['completed']
+
+        const { data: appointments } = await supabase
+          .from('appointments')
+          .select('date')
+          .eq('patient_id', patientId)
+          .in('status', statuses)
+          .gte('date', monthStart)
+          .lte('date', monthEnd)
+          .order('date', { ascending: true })
+
+        if (cancelled) return
+
+        if (!appointments || appointments.length === 0) {
+          setNoDataMessage('Este paciente não teve sessões no mês anterior.')
+          setMessageText('')
+          return
+        }
+
+        const formattedDates = appointments.map(a =>
+          new Date(a.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        ).join(', ')
+
+        const count = appointments.length
+        const totalAmount = count * sessionValue
+        const reminderDay = aiSettings.reminder_day ?? 10
+        const billingDay = aiSettings.billing_day ?? 5
+        const now = new Date()
+        // Match edge function logic: if reminderDay <= billingDay, due date is next month
+        const dueDate = reminderDay <= billingDay
+          ? new Date(now.getFullYear(), now.getMonth() + 1, reminderDay)
+          : new Date(now.getFullYear(), now.getMonth(), reminderDay)
+        const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+        const variables: Record<string, string> = {
+          nome: patientName,
+          valor: totalAmount.toFixed(2),
+          mes: monthName,
+          sessoes: String(count),
+          vencimento: dueDate.toLocaleDateString('pt-BR'),
+          datas_sessoes: formattedDates,
+        }
+
+        const template = aiSettings.billing_template || ''
+        setMessageText(renderTemplate(template, variables))
+
+      } else if (messageType === 'reminder') {
+        const { data: unpaidInvoices } = await supabase
+          .from('invoices')
+          .select('total_amount, amount_paid, due_date, reference_month')
+          .eq('patient_id', patientId)
+          .in('status', ['pending', 'partial', 'overdue'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (cancelled) return
+
+        if (!unpaidInvoices || unpaidInvoices.length === 0) {
+          setNoDataMessage('Este paciente não tem faturas pendentes.')
+          setMessageText('')
+          return
+        }
+
+        const invoice = unpaidInvoices[0]
+        const remaining = invoice.total_amount - invoice.amount_paid
+        const monthName = new Date(invoice.reference_month + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+        const variables: Record<string, string> = {
+          nome: patientName,
+          valor: remaining.toFixed(2),
+          mes: monthName,
+          vencimento: new Date(invoice.due_date + 'T00:00:00').toLocaleDateString('pt-BR'),
+        }
+
+        const template = aiSettings.reminder_1_template || ''
+        setMessageText(renderTemplate(template, variables))
+
+      } else if (messageType === 'appointment_reminder') {
+        const today = format(new Date(), 'yyyy-MM-dd')
+
+        const { data: nextAppointments } = await supabase
+          .from('appointments')
+          .select('date, start_time')
+          .eq('patient_id', patientId)
+          .eq('status', 'scheduled')
+          .gte('date', today)
+          .order('date', { ascending: true })
+          .order('start_time', { ascending: true })
+          .limit(1)
+
+        if (cancelled) return
+
+        if (!nextAppointments || nextAppointments.length === 0) {
+          setNoDataMessage('Este paciente não tem sessões agendadas.')
+          setMessageText('')
+          return
+        }
+
+        const apt = nextAppointments[0]
+        const variables: Record<string, string> = {
+          nome: patientName,
+          data: format(new Date(apt.date + 'T00:00:00'), "EEEE, d 'de' MMMM", { locale: ptBR }),
+          horario: apt.start_time?.slice(0, 5) || '',
+        }
+
+        const template = aiSettings.appointment_reminder_template || ''
+        setMessageText(renderTemplate(template, variables))
+      }
     }
 
-    setMessageText(renderTemplate(template, variables))
-  }, [aiSettings, messageType, open, patientName, sessionsCount, sessionValue])
+    function generateSimulatedPreview() {
+      if (!aiSettings) return
+
+      const now = new Date()
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const monthStart = format(startOfMonth(prevMonth), 'yyyy-MM-dd')
+      const monthEnd = format(endOfMonth(prevMonth), 'yyyy-MM-dd')
+
+      // Fetch session count for simulated mode
+      supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('patient_id', patientId)
+        .in('status', ['completed', 'cancelled'])
+        .gte('date', monthStart)
+        .lte('date', monthEnd)
+        .then(({ count }) => {
+          if (cancelled) return
+          const sessionsCount = count ?? 0
+          const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          const reminderDay = aiSettings!.reminder_day ?? 10
+          const dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
+          const totalAmount = sessionsCount * sessionValue
+
+          const variables: Record<string, string> = {
+            nome: patientName,
+            valor: totalAmount.toFixed(2),
+            mes: monthName,
+            sessoes: String(sessionsCount),
+            vencimento: dueDate.toLocaleDateString('pt-BR'),
+            datas_sessoes: '',
+            data: format(now, "EEEE, d 'de' MMMM", { locale: ptBR }),
+            horario: format(now, 'HH:mm'),
+          }
+
+          let template = ''
+          if (messageType === 'billing') {
+            template = aiSettings!.billing_template || ''
+          } else if (messageType === 'reminder') {
+            template = aiSettings!.reminder_1_template || ''
+          } else if (messageType === 'appointment_reminder') {
+            template = aiSettings!.appointment_reminder_template || ''
+          }
+
+          setMessageText(renderTemplate(template, variables))
+        })
+    }
+
+    generatePreview()
+
+    return () => { cancelled = true }
+  }, [aiSettings, messageType, open, patientId, patientName, sessionValue, useRealData])
 
   const handleSend = async () => {
     if (!user || !messageText.trim()) return
@@ -194,19 +339,47 @@ export default function SendTestMessageDialog({
             </Select>
           </div>
 
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-foreground">
+                Usar dados reais
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Busca faturas, sessões e agendamentos reais
+              </p>
+            </div>
+            <Switch
+              checked={useRealData}
+              onCheckedChange={setUseRealData}
+            />
+          </div>
+
           <div>
             <label className="text-sm font-medium text-foreground mb-1.5 block">
               Preview da mensagem
             </label>
-            <textarea
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-input bg-surface text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Você pode editar a mensagem antes de enviar.
-            </p>
+            {realDataLoading ? (
+              <div className="flex items-center justify-center py-8 rounded-lg border border-input bg-surface">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : noDataMessage ? (
+              <div className="flex items-center gap-2 px-3 py-4 rounded-lg border border-input bg-muted/50 text-sm text-muted-foreground">
+                <Info className="h-4 w-4 shrink-0" />
+                {noDataMessage}
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  rows={8}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-surface text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Você pode editar a mensagem antes de enviar.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -216,7 +389,7 @@ export default function SendTestMessageDialog({
           </Button>
           <Button
             onClick={handleSend}
-            disabled={isSending || !messageText.trim()}
+            disabled={isSending || !messageText.trim() || !!noDataMessage}
           >
             {isSending ? (
               <>

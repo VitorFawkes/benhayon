@@ -95,24 +95,27 @@ serve(async () => {
           .eq('profile_id', msg.profile_id)
           .single()
 
-        // Enforce send window
-        const currentHour = now.getHours()
+        // Enforce send window (convert UTC to BRT for comparison)
+        const brTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+        const currentHour = brTime.getHours()
         const startHour = aiSettings?.send_start_hour ?? 9
         const endHour = aiSettings?.send_end_hour ?? 20
-        const dayOfWeek = now.getDay()
+        const dayOfWeek = brTime.getDay()
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
 
         if (currentHour < startHour || currentHour >= endHour || (!aiSettings?.send_on_weekends && isWeekend)) {
-          // Outside send window — reschedule for next valid send_start_hour
-          const nextSend = new Date(now)
+          // Outside send window — reschedule for next valid send_start_hour (in BRT)
+          const nextSendBR = new Date(brTime)
           if (currentHour >= endHour || (!aiSettings?.send_on_weekends && isWeekend)) {
-            nextSend.setDate(nextSend.getDate() + 1)
+            nextSendBR.setDate(nextSendBR.getDate() + 1)
           }
           // Skip to Monday if landing on weekend and weekends disabled
-          while (!aiSettings?.send_on_weekends && (nextSend.getDay() === 0 || nextSend.getDay() === 6)) {
-            nextSend.setDate(nextSend.getDate() + 1)
+          while (!aiSettings?.send_on_weekends && (nextSendBR.getDay() === 0 || nextSendBR.getDay() === 6)) {
+            nextSendBR.setDate(nextSendBR.getDate() + 1)
           }
-          nextSend.setHours(startHour, 0, 0, 0)
+          nextSendBR.setHours(startHour, 0, 0, 0)
+          // Convert BRT back to UTC for storage
+          const nextSend = new Date(nextSendBR.getTime() + 3 * 60 * 60 * 1000)
 
           await supabase.from('message_queue')
             .update({ scheduled_for: nextSend.toISOString() })

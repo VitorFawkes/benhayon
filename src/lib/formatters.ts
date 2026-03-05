@@ -19,10 +19,15 @@ export function formatPhone(phone: string): string {
   return phone
 }
 
+function toSaoPaulo(date: Date): Date {
+  const sp = date.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+  return new Date(sp)
+}
+
 export function formatDate(date: string | Date, pattern = 'dd/MM/yyyy'): string {
   const parsed = typeof date === 'string' ? parseISO(date) : date
   if (!isValid(parsed)) return '—'
-  return format(parsed, pattern, { locale: ptBR })
+  return format(toSaoPaulo(parsed), pattern, { locale: ptBR })
 }
 
 export function formatDateTime(date: string | Date): string {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   MessageCircle,
@@ -10,6 +10,14 @@ import {
   Phone,
   RefreshCw,
   Power,
+  Send,
+  Clock,
+  XCircle,
+  CheckCircle2,
+  AlertTriangle,
+  BotOff,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import {
   useWhatsAppInstance,
@@ -19,10 +27,12 @@ import {
   useDisconnectWhatsApp,
 } from '@/hooks/useWhatsApp'
 import { useMessageLogs } from '@/hooks/useMessageLogs'
+import { useMessageQueue, useCancelMessage, useTogglePatientAI } from '@/hooks/useMessageQueue'
 import MessageItem from '@/components/messages/MessageItem'
 import MediaViewer from '@/components/messages/MediaViewer'
 import { formatPhone } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import type { MessageQueueItem, OutboundMessageType, QueueStatus } from '@/types'
 
 export default function WhatsApp() {
   const { data: instance, isLoading: loadingInstance, refetch } = useWhatsAppInstance()
@@ -31,6 +41,12 @@ export default function WhatsApp() {
   const refreshQR = useRefreshQRCode()
   const disconnectWhatsApp = useDisconnectWhatsApp()
   const { data: messages } = useMessageLogs({ limit: 20 })
+  const { data: queuedMessages, isLoading: loadingQueue } = useMessageQueue({
+    status: ['queued', 'sending', 'failed'],
+    limit: 30,
+  })
+  const cancelMessage = useCancelMessage()
+  const togglePatientAI = useTogglePatientAI()
 
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
@@ -266,6 +282,27 @@ export default function WhatsApp() {
         )}
       </div>
 
+      {/* Message Queue */}
+      <MessageQueueSection
+        messages={queuedMessages || []}
+        loading={loadingQueue}
+        onCancel={(id) => {
+          cancelMessage.mutate(id, {
+            onSuccess: () => toast.success('Envio cancelado'),
+            onError: () => toast.error('Erro ao cancelar'),
+          })
+        }}
+        onDisableAI={(patientId, patientName) => {
+          togglePatientAI.mutate(
+            { patientId, enabled: false },
+            {
+              onSuccess: () => toast.success(`IA desativada para ${patientName}`),
+              onError: () => toast.error('Erro ao desativar IA'),
+            }
+          )
+        }}
+      />
+
       {/* Message Log */}
       <div className="bg-surface border border-border rounded-xl">
         <div className="px-6 py-4 border-b border-border">
@@ -302,5 +339,189 @@ export default function WhatsApp() {
         imageUrl={selectedImageUrl}
       />
     </motion.div>
+  )
+}
+
+// ─── Message Queue Section ───
+
+const MESSAGE_TYPE_LABELS: Record<OutboundMessageType, string> = {
+  billing: 'Cobrança',
+  reminder: 'Lembrete',
+  thank_you: 'Agradecimento',
+  appointment_reminder: 'Lembrete de sessão',
+  custom: 'Personalizada',
+}
+
+const STATUS_CONFIG: Record<QueueStatus, { label: string; icon: typeof Clock; className: string }> = {
+  queued: { label: 'Na fila', icon: Clock, className: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950' },
+  sending: { label: 'Enviando', icon: Loader2, className: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' },
+  sent: { label: 'Enviado', icon: CheckCircle2, className: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950' },
+  failed: { label: 'Falhou', icon: AlertTriangle, className: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950' },
+  cancelled: { label: 'Cancelado', icon: XCircle, className: 'text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-900' },
+}
+
+function MessageQueueSection({
+  messages,
+  loading,
+  onCancel,
+  onDisableAI,
+}: {
+  messages: MessageQueueItem[]
+  loading: boolean
+  onCancel: (id: string) => void
+  onDisableAI: (patientId: string, patientName: string) => void
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  return (
+    <div className="bg-surface border border-border rounded-xl">
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <h2 className="font-semibold text-foreground flex items-center gap-2">
+          <Send size={18} />
+          Fila de Envio
+          {messages.length > 0 && (
+            <span className="ml-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              {messages.length}
+            </span>
+          )}
+        </h2>
+      </div>
+      <div className="p-4">
+        {loading ? (
+          <div className="p-8 flex items-center justify-center">
+            <Loader2 className="animate-spin text-muted-foreground" size={20} />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            Nenhuma mensagem pendente na fila.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {messages.map((msg) => {
+              const isExpanded = expandedId === msg.id
+              const statusCfg = STATUS_CONFIG[msg.status]
+              const StatusIcon = statusCfg.icon
+              const canCancel = msg.status === 'queued' || msg.status === 'sending'
+              const scheduledDate = new Date(msg.scheduled_for)
+              const patientName = msg.patient?.full_name || 'Paciente'
+
+              return (
+                <div
+                  key={msg.id}
+                  className="border border-border rounded-lg overflow-hidden"
+                >
+                  {/* Header row */}
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : msg.id)}
+                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', statusCfg.className)}>
+                      <StatusIcon size={12} className={msg.status === 'sending' ? 'animate-spin' : ''} />
+                      {statusCfg.label}
+                    </span>
+
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                      {MESSAGE_TYPE_LABELS[msg.message_type]}
+                    </span>
+
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {patientName}
+                    </span>
+
+                    <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
+                      {scheduledDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+
+                    {isExpanded ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
+                  </button>
+
+                  {/* Expanded content */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                          {/* Message content */}
+                          <div className="bg-muted/50 rounded-lg p-3">
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Conteúdo da mensagem</p>
+                            <p className="text-sm text-foreground whitespace-pre-wrap">{msg.message_content}</p>
+                          </div>
+
+                          {/* Meta info */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Telefone: </span>
+                              <span className="text-foreground">{msg.patient?.phone ? formatPhone(msg.patient.phone) : '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Agendado: </span>
+                              <span className="text-foreground">{scheduledDate.toLocaleString('pt-BR')}</span>
+                            </div>
+                            {msg.invoice && (
+                              <div>
+                                <span className="text-muted-foreground">Fatura: </span>
+                                <span className="text-foreground">
+                                  {new Date(msg.invoice.reference_month).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                  {' — R$ '}{msg.invoice.total_amount.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {msg.escalation_level > 0 && (
+                              <div>
+                                <span className="text-muted-foreground">Nível: </span>
+                                <span className="text-foreground">{msg.escalation_level}º lembrete</span>
+                              </div>
+                            )}
+                            {msg.attempts > 0 && (
+                              <div>
+                                <span className="text-muted-foreground">Tentativas: </span>
+                                <span className="text-foreground">{msg.attempts}/{msg.max_attempts}</span>
+                              </div>
+                            )}
+                            {msg.last_error && (
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">Erro: </span>
+                                <span className="text-red-600 dark:text-red-400">{msg.last_error}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex gap-2 pt-1">
+                            {canCancel && (
+                              <button
+                                onClick={() => onCancel(msg.id)}
+                                className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5"
+                              >
+                                <XCircle size={14} />
+                                Cancelar envio
+                              </button>
+                            )}
+                            {msg.patient?.ai_enabled !== false && (
+                              <button
+                                onClick={() => onDisableAI(msg.patient_id, patientName)}
+                                className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 dark:hover:bg-amber-950 dark:hover:text-amber-400 dark:hover:border-amber-800 transition-colors flex items-center gap-1.5"
+                              >
+                                <BotOff size={14} />
+                                Desativar IA
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
