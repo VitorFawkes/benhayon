@@ -5,19 +5,23 @@ import { ptBR } from 'date-fns/locale'
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Plus,
   FileText,
   CreditCard,
   Receipt,
   Eye,
   Image,
+  Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate, formatMonthYear } from '@/lib/formatters'
 import {
   PAYMENT_METHOD_LABELS,
 } from '@/constants'
-import { useInvoices, useInvoice } from '@/hooks/useInvoices'
+import { useInvoices, useInvoice, useInvoicePreview } from '@/hooks/useInvoices'
+import { useAISettings } from '@/hooks/useAISettings'
 import { usePayments } from '@/hooks/usePayments'
 import { useReceiptAnalyses, useConfirmReceipt, useRejectReceipt } from '@/hooks/useReceiptAnalyses'
 import type { InvoiceStatus, ReceiptAnalysis, Payment } from '@/types'
@@ -67,6 +71,12 @@ export default function Billing() {
   const [dateTo, setDateTo] = useState('')
   const [receiptViewerOpen, setReceiptViewerOpen] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptAnalysis | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+
+  // Prévia: sempre referencia o mês ANTERIOR (o que será cobrado)
+  const prevMonthDate = useMemo(() => subMonths(new Date(), 1), [])
+  const { data: previewItems } = useInvoicePreview(prevMonthDate)
+  const { data: aiSettings } = useAISettings()
 
   // ─── Invoice filters ───
   const invoiceFilters = useMemo(() => {
@@ -144,6 +154,71 @@ export default function Billing() {
             TAB 1: COBRANÇAS
         ════════════════════════════════════ */}
         <TabsContent value="invoices" className="space-y-4">
+          {/* Prévia de cobranças — mês anterior */}
+          {previewItems && previewItems.length > 0 && (
+            <div className="rounded-xl border border-border bg-surface overflow-hidden">
+              <button
+                onClick={() => setPreviewOpen(!previewOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Info size={16} className="text-primary" />
+                  <span className="text-sm font-medium text-foreground">
+                    Prévia de cobranças — Referente a{' '}
+                    <span className="capitalize">{format(prevMonthDate, 'MMMM yyyy', { locale: ptBR })}</span>
+                  </span>
+                  <Badge className="bg-primary/10 text-primary border-0 text-xs">
+                    {previewItems.filter(i => !i.already_has_invoice).length} pendente{previewItems.filter(i => !i.already_has_invoice).length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                {previewOpen ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+              </button>
+              {previewOpen && (
+                <div className="border-t border-border px-4 pb-4">
+                  <p className="text-xs text-muted-foreground py-2">
+                    Cobrança prevista para dia {aiSettings?.billing_day ?? '—'} do mês. Sessões realizadas e canceladas contam.
+                  </p>
+                  <div className="overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-muted-foreground border-b border-border">
+                          <th className="text-left py-2 font-medium">Paciente</th>
+                          <th className="text-center py-2 font-medium">Sessões</th>
+                          <th className="text-right py-2 font-medium">Valor/Sessão</th>
+                          <th className="text-right py-2 font-medium">Total</th>
+                          <th className="text-right py-2 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewItems.map((item) => (
+                          <tr key={item.patient_id} className="border-b border-border/50">
+                            <td className="py-2 font-medium">{item.patient_name}</td>
+                            <td className="py-2 text-center">{item.sessions_count}</td>
+                            <td className="py-2 text-right">{formatCurrency(item.session_value)}</td>
+                            <td className="py-2 text-right font-medium">{formatCurrency(item.total_amount)}</td>
+                            <td className="py-2 text-right">
+                              {item.already_has_invoice ? (
+                                <Badge className="bg-success-light text-success border-0 text-xs">Já cobrado</Badge>
+                              ) : (
+                                <Badge className="bg-warning-light text-warning border-0 text-xs">Pendente</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 text-xs text-muted-foreground">
+                    <span>{previewItems.length} paciente{previewItems.length > 1 ? 's' : ''}</span>
+                    <span className="font-semibold text-foreground">
+                      Total: {formatCurrency(previewItems.reduce((s, i) => s + i.total_amount, 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             {/* Month navigator */}

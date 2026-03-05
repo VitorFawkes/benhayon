@@ -36,11 +36,13 @@ import PatientSummary from '@/components/patients/PatientSummary'
 import PatientSessions from '@/components/patients/PatientSessions'
 import PatientPayments from '@/components/patients/PatientPayments'
 import PatientMessages from '@/components/patients/PatientMessages'
+import SendTestMessageDialog from '@/components/patients/SendTestMessageDialog'
 import { usePatient, useSoftDeletePatient } from '@/hooks/usePatients'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPhone, formatDate } from '@/lib/formatters'
 import { PATIENT_STATUS_LABELS, PATIENT_STATUS_COLORS } from '@/constants'
+import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
 
 export default function PatientDetail() {
   const { id } = useParams<{ id: string }>()
@@ -51,6 +53,9 @@ export default function PatientDetail() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [testMessageOpen, setTestMessageOpen] = useState(false)
+  const now = new Date()
+  const [dateRange, setDateRange] = useState({ from: startOfMonth(now), to: endOfMonth(now) })
 
   const handleToggleAI = async () => {
     if (!patient) return
@@ -150,6 +155,10 @@ export default function PatientDetail() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTestMessageOpen(true)}>
+            <MessageSquare className="h-4 w-4" />
+            Testar Mensagem
+          </Button>
           <Button variant="outline" onClick={() => setEditOpen(true)}>
             <Pencil className="h-4 w-4" />
             Editar
@@ -280,8 +289,47 @@ export default function PatientDetail() {
         </CardContent>
       </Card>
 
+      {/* Date Filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex gap-1">
+          {[
+            { label: 'Este mês', value: 'thisMonth' as const },
+            { label: 'Mês anterior', value: 'lastMonth' as const },
+            { label: 'Últimos 3 meses', value: 'last3Months' as const },
+          ].map((p) => (
+            <button
+              key={p.value}
+              onClick={() => {
+                const today = new Date()
+                if (p.value === 'thisMonth') setDateRange({ from: startOfMonth(today), to: endOfMonth(today) })
+                else if (p.value === 'lastMonth') { const prev = subMonths(today, 1); setDateRange({ from: startOfMonth(prev), to: endOfMonth(prev) }) }
+                else setDateRange({ from: startOfMonth(subMonths(today, 2)), to: endOfMonth(today) })
+              }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={format(dateRange.from, 'yyyy-MM-dd')}
+            onChange={(e) => e.target.value && setDateRange((prev) => ({ ...prev, from: new Date(e.target.value + 'T00:00:00') }))}
+            className="h-8 px-2 text-xs rounded-lg border border-input bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+          />
+          <span className="text-xs text-muted-foreground">até</span>
+          <input
+            type="date"
+            value={format(dateRange.to, 'yyyy-MM-dd')}
+            onChange={(e) => e.target.value && setDateRange((prev) => ({ ...prev, to: new Date(e.target.value + 'T00:00:00') }))}
+            className="h-8 px-2 text-xs rounded-lg border border-input bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+          />
+        </div>
+      </div>
+
       {/* Summary */}
-      <PatientSummary patientId={patient.id} sessionValue={patient.session_value} />
+      <PatientSummary patientId={patient.id} sessionValue={patient.session_value} dateRange={dateRange} />
 
       {/* Tabs */}
       <Tabs defaultValue="sessions" className="mt-6">
@@ -301,7 +349,7 @@ export default function PatientDetail() {
         </TabsList>
 
         <TabsContent value="sessions">
-          <PatientSessions patientId={patient.id} />
+          <PatientSessions patientId={patient.id} dateRange={dateRange} />
         </TabsContent>
 
         <TabsContent value="payments">
@@ -319,6 +367,16 @@ export default function PatientDetail() {
         onOpenChange={setEditOpen}
         mode="edit"
         patient={patient}
+      />
+
+      {/* Test Message Dialog */}
+      <SendTestMessageDialog
+        open={testMessageOpen}
+        onOpenChange={setTestMessageOpen}
+        patientId={patient.id}
+        patientName={patient.full_name}
+        patientPhone={patient.phone}
+        sessionValue={patient.session_value}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -54,59 +54,55 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
   const referenceMonth = prevMonth.toISOString().split('T')[0]
 
   // Get completed appointments for previous month
+  const billCancelled = settings.bill_cancelled_sessions !== false
+  const statuses = billCancelled ? ['completed', 'cancelled'] : ['completed']
+
   const { data: appointments } = await supabase
     .from('appointments')
-    .select('patient_id, patient:patients(id, full_name, phone, session_value)')
+    .select('patient_id, date, patient:patients(id, full_name, phone, session_value)')
     .eq('profile_id', profileId)
-    .eq('status', 'completed')
+    .in('status', statuses)
     .gte('date', prevMonth.toISOString().split('T')[0])
     .lte('date', prevMonthEnd.toISOString().split('T')[0])
 
   if (!appointments || appointments.length === 0) return
 
   // Group by patient
-  const patientMap = new Map<string, { count: number; patient: Record<string, unknown> }>()
+  const patientMap = new Map<string, { count: number; dates: string[]; patient: Record<string, unknown> }>()
   for (const apt of appointments) {
     const pid = apt.patient_id
     const existing = patientMap.get(pid)
     if (existing) {
       existing.count++
+      existing.dates.push(apt.date)
     } else {
-      patientMap.set(pid, { count: 1, patient: apt.patient as unknown as Record<string, unknown> })
+      patientMap.set(pid, { count: 1, dates: [apt.date], patient: apt.patient as unknown as Record<string, unknown> })
     }
   }
 
   // Due date = reminder_day of current month (when reminders start = payment deadline)
   const dueDate = new Date(now.getFullYear(), now.getMonth(), reminderDay)
 
-  for (const [patientId, { count, patient }] of patientMap) {
+  for (const [patientId, { count, dates, patient }] of patientMap) {
     const sessionValue = Number(patient.session_value) || 0
     const totalAmount = count * sessionValue
 
     if (totalAmount <= 0) continue
 
-    // Check if invoice already exists for this month
-    const { data: existing } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('profile_id', profileId)
-      .eq('patient_id', patientId)
-      .eq('reference_month', referenceMonth)
-      .maybeSingle()
-
-    if (existing) continue // Already generated
-
-    // Create invoice
+    // Idempotent: skip if invoice already exists (race-safe via ignoreDuplicates)
     const { data: invoice } = await supabase
       .from('invoices')
-      .insert({
-        profile_id: profileId,
-        patient_id: patientId,
-        reference_month: referenceMonth,
-        total_sessions: count,
-        total_amount: totalAmount,
-        due_date: dueDate.toISOString().split('T')[0],
-      })
+      .upsert(
+        {
+          profile_id: profileId,
+          patient_id: patientId,
+          reference_month: referenceMonth,
+          total_sessions: count,
+          total_amount: totalAmount,
+          due_date: dueDate.toISOString().split('T')[0],
+        },
+        { onConflict: 'profile_id,patient_id,reference_month', ignoreDuplicates: true }
+      )
       .select()
       .single()
 
@@ -123,12 +119,17 @@ async function generateMonthlyInvoices(settings: Record<string, unknown>) {
       // Queue billing message only if AI is enabled
       const monthName = prevMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
       const template = (settings.billing_template as string) || ''
+      const formattedDates = dates.sort().map(d =>
+        new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+      ).join(', ')
+
       const message = renderTemplate(template, {
         nome: patient.full_name as string,
         valor: totalAmount.toFixed(2),
         mes: monthName,
         sessoes: String(count),
         vencimento: dueDate.toLocaleDateString('pt-BR'),
+        datas_sessoes: formattedDates,
       })
 
       // Schedule within allowed hours

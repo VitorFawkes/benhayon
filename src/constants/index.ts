@@ -90,4 +90,5 @@ export const TEMPLATE_VARIABLES = [
   { key: '{data}', label: 'Data da sessão' },
   { key: '{horario}', label: 'Horário da sessão' },
   { key: '{clinica}', label: 'Nome da clínica' },
+  { key: '{datas_sessoes}', label: 'Datas das sessões' },
 ]

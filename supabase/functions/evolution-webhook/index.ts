@@ -34,15 +34,15 @@ serve(async (req) => {
         .update({ status })
         .eq('instance_name', instance)
 
-      // If disconnected, create alert
-      if (status === 'disconnected') {
-        const { data: inst } = await supabase
-          .from('whatsapp_instances')
-          .select('profile_id')
-          .eq('instance_name', instance)
-          .single()
+      const { data: inst } = await supabase
+        .from('whatsapp_instances')
+        .select('profile_id')
+        .eq('instance_name', instance)
+        .single()
 
-        if (inst) {
+      if (inst) {
+        if (status === 'disconnected') {
+          // Create alert for disconnection
           await supabase.from('alerts').insert({
             profile_id: inst.profile_id,
             type: 'whatsapp_disconnected',
@@ -50,6 +50,14 @@ serve(async (req) => {
             title: 'WhatsApp desconectou',
             description: 'Sua conexão com o WhatsApp foi perdida. Reconecte para continuar recebendo e enviando mensagens.',
           })
+        } else if (status === 'connected') {
+          // Auto-resolve disconnection alerts
+          await supabase
+            .from('alerts')
+            .update({ resolved_at: new Date().toISOString(), resolved_action: 'auto_resolved_on_reconnect' })
+            .eq('profile_id', inst.profile_id)
+            .eq('type', 'whatsapp_disconnected')
+            .is('resolved_at', null)
         }
       }
 
@@ -67,10 +75,24 @@ serve(async (req) => {
         // Skip outgoing messages (fromMe = true)
         if (key.fromMe) continue
 
-        // Extract sender phone
+        // Extract sender phone — ONLY direct messages from individual chats
         const remoteJid = key.remoteJid || ''
-        const senderPhone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '')
+
+        // Reject group messages immediately
+        if (remoteJid.includes('@g.us')) {
+          console.log('Ignoring group message')
+          continue
+        }
+
+        const senderPhone = remoteJid.replace('@s.whatsapp.net', '')
         if (!senderPhone) continue
+
+        // Validate phone format before DB lookup
+        const normalizedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`
+        if (!/^\+\d{12,13}$/.test(normalizedPhone)) {
+          console.log(`Ignoring invalid phone format: ${normalizedPhone}`)
+          continue
+        }
 
         // Determine message type
         let messageType = 'text'
@@ -104,7 +126,6 @@ serve(async (req) => {
         if (!inst) continue
 
         // Find patient by phone number — only save messages from known patients
-        const normalizedPhone = senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`
         const { data: patient } = await supabase
           .from('patients')
           .select('id')

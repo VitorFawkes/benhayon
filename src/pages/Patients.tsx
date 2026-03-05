@@ -1,16 +1,18 @@
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Users } from 'lucide-react'
+import { Plus, Users, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import PatientCard from '@/components/patients/PatientCard'
 import PatientFilters from '@/components/patients/PatientFilters'
 import PatientForm from '@/components/patients/PatientForm'
+import PatientImportDialog from '@/components/patients/PatientImportDialog'
 import { usePatients } from '@/hooks/usePatients'
 import type { PatientStatus, PatientPaymentType } from '@/types'
 
 export default function Patients() {
   const [formOpen, setFormOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<PatientStatus | null>(null)
@@ -47,10 +49,16 @@ export default function Patients() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-foreground">Pacientes</h1>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Novo paciente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" />
+            Importar CSV
+          </Button>
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Novo paciente
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -120,6 +128,12 @@ export default function Patients() {
         open={formOpen}
         onOpenChange={setFormOpen}
         mode="create"
+      />
+
+      {/* Import dialog */}
+      <PatientImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
       />
     </motion.div>
   )

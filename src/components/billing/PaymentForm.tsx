@@ -87,6 +87,7 @@ export function PaymentForm({
 
   const selectedPatientId = watch('patient_id')
   const selectedInvoiceId = watch('invoice_id')
+  const currentAmount = watch('amount')
 
   // Buscar cobranças do paciente selecionado (pendentes ou parciais)
   const { data: patientInvoices = [] } = useInvoices({
@@ -199,7 +200,7 @@ export function PaymentForm({
           {/* Cobrança (opcional) */}
           {selectedPatientId && (
             <div className="space-y-1.5">
-              <Label htmlFor="invoice">Cobrança (opcional)</Label>
+              <Label htmlFor="invoice">Cobrança {patientInvoices.length > 0 ? '' : '(opcional)'}</Label>
               <Controller
                 control={control}
                 name="invoice_id"
@@ -228,6 +229,11 @@ export function PaymentForm({
                   </Select>
                 )}
               />
+              {patientInvoices.length > 0 && !selectedInvoiceId && (
+                <p className="text-xs text-warning">
+                  Este paciente tem {patientInvoices.length} cobrança(s) pendente(s). Considere vincular o pagamento.
+                </p>
+              )}
             </div>
           )}
 
@@ -244,6 +250,24 @@ export function PaymentForm({
             {errors.amount && (
               <p className="text-xs text-destructive">{errors.amount.message}</p>
             )}
+            {(() => {
+              if (!selectedInvoiceId) return null
+              const invoice = patientInvoices.find((inv) => inv.id === selectedInvoiceId)
+              if (!invoice) return null
+              const remaining = invoice.total_amount - invoice.amount_paid
+              if (currentAmount > remaining) {
+                return (
+                  <p className="text-xs text-warning">
+                    Valor excede o saldo restante de {formatCurrency(remaining)}
+                  </p>
+                )
+              }
+              return (
+                <p className="text-xs text-muted-foreground">
+                  Saldo restante: {formatCurrency(remaining)}
+                </p>
+              )
+            })()}
           </div>
 
           {/* Data */}

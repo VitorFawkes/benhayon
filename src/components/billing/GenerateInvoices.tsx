@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { CalendarDays, CheckCircle2, FileText, Loader2 } from 'lucide-react'
-import { formatCurrency } from '@/lib/formatters'
+import { CalendarDays, CheckCircle2, FileText, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { formatCurrency, formatDate } from '@/lib/formatters'
 import { useInvoicePreview, useGenerateInvoices } from '@/hooks/useInvoices'
 import type { InvoicePreviewItem } from '@/hooks/useInvoices'
+import { Badge } from '@/components/ui/badge'
+import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS } from '@/constants'
+import type { AppointmentStatus } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,6 +41,7 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date())
   const [onlyNew, setOnlyNew] = useState(true)
   const [selectedItems, setSelectedItems] = useState<InvoicePreviewItem[]>([])
+  const [expandedPatients, setExpandedPatients] = useState<Set<string>>(new Set())
 
   const { data: previewItems, isLoading: previewLoading } = useInvoicePreview(
     open ? selectedMonth : null
@@ -66,8 +70,10 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
         items: selectedItems,
         referenceMonth: selectedMonth,
       })
+      const totalSessions = selectedItems.reduce((sum, item) => sum + item.sessions_count, 0)
+      const totalValue = selectedItems.reduce((sum, item) => sum + item.total_amount, 0)
       toast.success(
-        `${selectedItems.length} cobranca${selectedItems.length > 1 ? 's' : ''} gerada${selectedItems.length > 1 ? 's' : ''} com sucesso!`
+        `${selectedItems.length} cobrança${selectedItems.length > 1 ? 's' : ''} gerada${selectedItems.length > 1 ? 's' : ''} — ${totalSessions} sessões, total ${formatCurrency(totalValue)}`
       )
       handleClose()
     } catch (error) {
@@ -92,8 +98,8 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
           </DialogTitle>
           <DialogDescription>
             {step === 1
-              ? 'Selecione o mês de referência para visualizar as sessões realizadas.'
-              : 'Confirme a geração das cobranças abaixo.'}
+              ? 'Selecione o mês de referência das sessões que serão cobradas.'
+              : `Confirme a geração de ${selectedItems.length} cobrança${selectedItems.length > 1 ? 's' : ''} — total de ${formatCurrency(selectedItems.reduce((s, i) => s + i.total_amount, 0))}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -162,25 +168,55 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredItems.map((item) => (
-                        <TableRow key={item.patient_id}>
-                          <TableCell className="font-medium">
-                            {item.patient_name}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.sessions_count}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(item.session_value)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(item.total_amount)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {format(new Date(item.due_date + 'T12:00:00'), 'dd/MM/yyyy')}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredItems.map((item) => {
+                        const isExpanded = expandedPatients.has(item.patient_id)
+                        return (
+                          <Fragment key={item.patient_id}>
+                            <TableRow
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => {
+                                setExpandedPatients((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(item.patient_id)) next.delete(item.patient_id)
+                                  else next.add(item.patient_id)
+                                  return next
+                                })
+                              }}
+                            >
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-1.5">
+                                  {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  {item.patient_name}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {item.sessions_count}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatCurrency(item.session_value)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatCurrency(item.total_amount)}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                {format(new Date(item.due_date + 'T12:00:00'), 'dd/MM/yyyy')}
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && item.sessions.sort((a, b) => a.date.localeCompare(b.date)).map((s, i) => (
+                              <TableRow key={`${item.patient_id}-${i}`} className="bg-muted/20">
+                                <TableCell className="pl-10 text-sm text-muted-foreground" colSpan={2}>
+                                  {formatDate(s.date)}
+                                </TableCell>
+                                <TableCell colSpan={3}>
+                                  <Badge className={`border-0 ${APPOINTMENT_STATUS_COLORS[s.status as AppointmentStatus]}`}>
+                                    {APPOINTMENT_STATUS_LABELS[s.status as AppointmentStatus]}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </Fragment>
+                        )
+                      })}
                     </TableBody>
                   </Table>
 

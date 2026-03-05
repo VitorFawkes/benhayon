@@ -13,7 +13,9 @@ import {
   X,
 } from 'lucide-react'
 import { useDashboardStats, useRevenueHistory, useDashboardDetails } from '@/hooks/useDashboardStats'
-import type { DashboardMetric } from '@/hooks/useDashboardStats'
+import { useWhatsAppInstance } from '@/hooks/useWhatsApp'
+import type { DashboardMetric, DateRange } from '@/hooks/useDashboardStats'
+import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
 import { formatCurrency, formatPercent, formatPhone } from '@/lib/formatters'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { cn } from '@/lib/utils'
@@ -39,11 +41,30 @@ const METRIC_LABELS: Record<DashboardMetric, string> = {
 
 
 export default function Dashboard() {
-  const { data: stats, isLoading: loadingStats } = useDashboardStats()
+  const now = new Date()
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: startOfMonth(now),
+    to: endOfMonth(now),
+  })
+  const { data: stats, isLoading: loadingStats } = useDashboardStats(dateRange)
   const { data: revenueHistory, isLoading: loadingHistory } = useRevenueHistory()
   const [activeMetric, setActiveMetric] = useState<DashboardMetric | null>(null)
-  const { data: details, isLoading: loadingDetails } = useDashboardDetails(activeMetric)
+  const { data: details, isLoading: loadingDetails } = useDashboardDetails(activeMetric, dateRange)
+  const { data: whatsAppInstance } = useWhatsAppInstance()
+  const isWhatsAppConnected = whatsAppInstance?.status === 'connected'
   const navigate = useNavigate()
+
+  const setPreset = (preset: 'thisMonth' | 'lastMonth' | 'last3Months') => {
+    const today = new Date()
+    if (preset === 'thisMonth') {
+      setDateRange({ from: startOfMonth(today), to: endOfMonth(today) })
+    } else if (preset === 'lastMonth') {
+      const prev = subMonths(today, 1)
+      setDateRange({ from: startOfMonth(prev), to: endOfMonth(prev) })
+    } else {
+      setDateRange({ from: startOfMonth(subMonths(today, 2)), to: endOfMonth(today) })
+    }
+  }
 
   const toggleMetric = (metric: DashboardMetric) => {
     setActiveMetric((prev) => (prev === metric ? null : metric))
@@ -63,7 +84,41 @@ export default function Dashboard() {
       transition={{ duration: 0.3 }}
       className="space-y-6"
     >
-      <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {[
+              { label: 'Este mês', value: 'thisMonth' as const },
+              { label: 'Mês anterior', value: 'lastMonth' as const },
+              { label: 'Últimos 3 meses', value: 'last3Months' as const },
+            ].map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPreset(p.value)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={format(dateRange.from, 'yyyy-MM-dd')}
+              onChange={(e) => e.target.value && setDateRange((prev) => ({ ...prev, from: new Date(e.target.value + 'T00:00:00') }))}
+              className="h-8 px-2 text-xs rounded-lg border border-input bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+            />
+            <span className="text-xs text-muted-foreground">até</span>
+            <input
+              type="date"
+              value={format(dateRange.to, 'yyyy-MM-dd')}
+              onChange={(e) => e.target.value && setDateRange((prev) => ({ ...prev, to: new Date(e.target.value + 'T00:00:00') }))}
+              className="h-8 px-2 text-xs rounded-lg border border-input bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Stat Cards */}
       <motion.div
@@ -236,7 +291,11 @@ export default function Dashboard() {
             <QuickAction href="/patients" label="Novo paciente" icon={Users} />
             <QuickAction href="/agenda" label="Agendar sessão" icon={Calendar} />
             <QuickAction href="/billing" label="Gerar cobranças" icon={DollarSign} />
-            <QuickAction href="/whatsapp" label="Conectar WhatsApp" icon={ArrowUpRight} />
+            <QuickAction
+              href="/whatsapp"
+              label={isWhatsAppConnected ? 'Ver mensagens' : 'Conectar WhatsApp'}
+              icon={ArrowUpRight}
+            />
           </div>
         </motion.div>
       </div>

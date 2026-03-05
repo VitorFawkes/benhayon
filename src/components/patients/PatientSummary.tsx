@@ -12,10 +12,12 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { Appointment } from '@/types'
 
 interface PatientSummaryProps {
   patientId: string
   sessionValue: number
+  dateRange?: { from: Date; to: Date }
 }
 
 interface SummaryData {
@@ -25,22 +27,25 @@ interface SummaryData {
   pendingAmount: number
   receivedThisMonth: number
   lastSessionDate: string | null
+  unbilledSessions: number
 }
 
-export default function PatientSummary({ patientId, sessionValue }: PatientSummaryProps) {
+export default function PatientSummary({ patientId, sessionValue, dateRange }: PatientSummaryProps) {
   const now = new Date()
-  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+  const from = dateRange?.from ?? startOfMonth(now)
+  const to = dateRange?.to ?? endOfMonth(now)
+  const monthStart = format(from, 'yyyy-MM-dd')
+  const monthEnd = format(to, 'yyyy-MM-dd')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['patient-summary', patientId, monthStart],
+    queryKey: ['patient-summary', patientId, monthStart, monthEnd],
     queryFn: async (): Promise<SummaryData> => {
-      const [appointmentsRes, invoicesRes, paymentsRes, lastSessionRes] =
+      const [appointmentsRes, invoicesRes, paymentsRes, lastSessionRes, invoicedMonthsRes] =
         await Promise.all([
-          // Appointments this month
+          // Appointments in period
           supabase
             .from('appointments')
-            .select('status')
+            .select('status, date')
             .eq('patient_id', patientId)
             .gte('date', monthStart)
             .lte('date', monthEnd),
@@ -52,7 +57,7 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
             .eq('patient_id', patientId)
             .in('status', ['pending', 'partial', 'overdue']),
 
-          // Payments this month
+          // Payments in period
           supabase
             .from('payments')
             .select('amount')
@@ -68,6 +73,12 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
             .eq('status', 'completed')
             .order('date', { ascending: false })
             .limit(1),
+
+          // Invoiced months for this patient (to detect unbilled sessions)
+          supabase
+            .from('invoices')
+            .select('reference_month')
+            .eq('patient_id', patientId),
         ])
 
       if (appointmentsRes.error) throw appointmentsRes.error
@@ -79,6 +90,17 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
       const invoices = invoicesRes.data ?? []
       const payments = paymentsRes.data ?? []
       const lastSession = lastSessionRes.data?.[0] ?? null
+      const invoicedMonths = new Set(
+        (invoicedMonthsRes.data ?? []).map((i: { reference_month: string }) => i.reference_month.slice(0, 7))
+      )
+
+      // Count billable sessions (completed + cancelled) in months without invoice
+      const billableStatuses = ['completed', 'cancelled']
+      const unbilledSessions = appointments.filter((a) => {
+        if (!billableStatuses.includes(a.status)) return false
+        const appointmentMonth = (a as Appointment).date.slice(0, 7)
+        return !invoicedMonths.has(appointmentMonth)
+      }).length
 
       return {
         completedThisMonth: appointments.filter((a) => a.status === 'completed').length,
@@ -90,6 +112,7 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
         ),
         receivedThisMonth: payments.reduce((sum, p) => sum + p.amount, 0),
         lastSessionDate: lastSession?.date ?? null,
+        unbilledSessions,
       }
     },
     enabled: !!patientId,
@@ -112,6 +135,7 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
     pendingAmount: 0,
     receivedThisMonth: 0,
     lastSessionDate: null,
+    unbilledSessions: 0,
   }
 
   const monthTotal = stats.completedThisMonth * sessionValue
@@ -119,14 +143,14 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
   const cards = [
     {
       icon: CalendarDays,
-      label: 'Sessoes do mes',
+      label: 'Sessões do mês',
       value: `${stats.completedThisMonth} realizadas / ${stats.scheduledThisMonth} agendadas`,
       color: 'text-primary',
       bgColor: 'bg-primary-light',
     },
     {
       icon: DollarSign,
-      label: 'Valor do mes',
+      label: 'Valor do mês',
       value: formatCurrency(monthTotal),
       color: 'text-secondary',
       bgColor: 'bg-secondary-light',
@@ -142,12 +166,13 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
       icon: Clock,
       label: 'Pendente',
       value: formatCurrency(stats.pendingAmount),
+      subtitle: stats.unbilledSessions > 0 ? `${stats.unbilledSessions} sessão(ões) sem cobrança` : undefined,
       color: 'text-warning',
       bgColor: 'bg-warning-light',
     },
     {
       icon: CalendarCheck,
-      label: 'Ultima sessao',
+      label: 'Última sessão',
       value: stats.lastSessionDate ? formatDate(stats.lastSessionDate) : '—',
       color: 'text-muted-foreground',
       bgColor: 'bg-muted',
@@ -180,6 +205,9 @@ export default function PatientSummary({ patientId, sessionValue }: PatientSumma
             </div>
             <p className="text-xs text-muted-foreground">{card.label}</p>
             <p className="text-sm font-bold text-foreground mt-0.5">{card.value}</p>
+            {'subtitle' in card && card.subtitle && (
+              <p className="text-[10px] text-warning mt-0.5">{card.subtitle}</p>
+            )}
           </div>
         )
       })}

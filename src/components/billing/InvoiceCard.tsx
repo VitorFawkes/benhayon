@@ -155,6 +155,14 @@ export function InvoiceCard({
                   {formatDate(invoice.due_date)}
                 </span>
               </div>
+              {invoice.sent_at && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Cobrança enviada</span>
+                  <span className="text-foreground">
+                    {formatDate(invoice.sent_at)}
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

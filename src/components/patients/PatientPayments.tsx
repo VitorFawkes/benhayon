@@ -136,7 +136,7 @@ export default function PatientPayments({ patientId }: PatientPaymentsProps) {
               Nenhum pagamento registrado
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Os pagamentos deste paciente aparecerrao aqui.
+              Os pagamentos deste paciente aparecerão aqui.
             </p>
           </CardContent>
         </Card>
@@ -148,8 +148,8 @@ export default function PatientPayments({ patientId }: PatientPaymentsProps) {
                 <TableRow>
                   <TableHead>Data</TableHead>
                   <TableHead>Valor</TableHead>
-                  <TableHead>Metodo</TableHead>
-                  <TableHead>Cobranca ref.</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Cobrança ref.</TableHead>
                   <TableHead>Comprovante</TableHead>
                 </TableRow>
               </TableHeader>
@@ -163,7 +163,12 @@ export default function PatientPayments({ patientId }: PatientPaymentsProps) {
                       {formatCurrency(payment.amount)}
                     </TableCell>
                     <TableCell>
-                      {PAYMENT_METHOD_LABELS[payment.payment_method] ?? payment.payment_method}
+                      <span>{PAYMENT_METHOD_LABELS[payment.payment_method] ?? payment.payment_method}</span>
+                      {payment.source === 'receipt_confirmed' && (
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-success-light text-success font-medium">
+                          via comprovante
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {payment.invoice?.reference_month

@@ -102,7 +102,7 @@ export default function PatientMessages({ patientId }: PatientMessagesProps) {
               Nenhuma mensagem registrada
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              As mensagens deste paciente aparecerrao aqui.
+              As mensagens deste paciente aparecerão aqui.
             </p>
           </CardContent>
         </Card>

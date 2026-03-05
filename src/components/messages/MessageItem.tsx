@@ -83,6 +83,11 @@ function TextContent({ message }: { message: MessageLog }) {
           className={cn('text-[10px] px-1.5 py-0', intentConfig.className)}
         >
           {intentConfig.label}
+          {message.ai_intent_confidence != null && (
+            <span className="ml-1 opacity-70">
+              {Math.round(message.ai_intent_confidence * 100)}%
+            </span>
+          )}
         </Badge>
       )}
 

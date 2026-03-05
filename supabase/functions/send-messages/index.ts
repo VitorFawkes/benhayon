@@ -27,8 +27,24 @@ serve(async () => {
     }
 
     if (!messages || messages.length === 0) {
+      // Cleanup: recover messages stuck in 'sending' for > 5 minutes
+      const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+      await supabase
+        .from('message_queue')
+        .update({ status: 'queued', last_error: 'Recovered from stuck sending state' })
+        .eq('status', 'sending')
+        .lt('updated_at', fiveMinAgo)
+
       return new Response(JSON.stringify({ sent: 0 }), { status: 200 })
     }
+
+    // Cleanup: recover messages stuck in 'sending' for > 5 minutes
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+    await supabase
+      .from('message_queue')
+      .update({ status: 'queued', last_error: 'Recovered from stuck sending state' })
+      .eq('status', 'sending')
+      .lt('updated_at', fiveMinAgo)
 
     let sent = 0
 
@@ -72,12 +88,52 @@ serve(async () => {
           }
         }
 
-        // Get AI settings for rate limiting
+        // Get AI settings for rate limiting and send window
         const { data: aiSettings } = await supabase
           .from('ai_settings')
-          .select('min_seconds_between_messages')
+          .select('min_seconds_between_messages, send_start_hour, send_end_hour, send_on_weekends, max_messages_per_hour')
           .eq('profile_id', msg.profile_id)
           .single()
+
+        // Enforce send window
+        const currentHour = now.getHours()
+        const startHour = aiSettings?.send_start_hour ?? 9
+        const endHour = aiSettings?.send_end_hour ?? 20
+        const dayOfWeek = now.getDay()
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+        if (currentHour < startHour || currentHour >= endHour || (!aiSettings?.send_on_weekends && isWeekend)) {
+          // Outside send window — reschedule for next valid send_start_hour
+          const nextSend = new Date(now)
+          if (currentHour >= endHour || (!aiSettings?.send_on_weekends && isWeekend)) {
+            nextSend.setDate(nextSend.getDate() + 1)
+          }
+          // Skip to Monday if landing on weekend and weekends disabled
+          while (!aiSettings?.send_on_weekends && (nextSend.getDay() === 0 || nextSend.getDay() === 6)) {
+            nextSend.setDate(nextSend.getDate() + 1)
+          }
+          nextSend.setHours(startHour, 0, 0, 0)
+
+          await supabase.from('message_queue')
+            .update({ scheduled_for: nextSend.toISOString() })
+            .eq('id', msg.id)
+          continue
+        }
+
+        // Enforce max messages per hour
+        const maxPerHour = aiSettings?.max_messages_per_hour ?? 30
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+        const { count: sentLastHour } = await supabase
+          .from('message_queue')
+          .select('*', { count: 'exact', head: true })
+          .eq('profile_id', msg.profile_id)
+          .eq('status', 'sent')
+          .gte('sent_at', oneHourAgo.toISOString())
+
+        if ((sentLastHour ?? 0) >= maxPerHour) {
+          console.log(`Rate limit reached for profile ${msg.profile_id}: ${sentLastHour}/${maxPerHour} per hour`)
+          break // Stop processing this batch entirely
+        }
 
         // Get WhatsApp instance
         const { data: instance } = await supabase
@@ -88,18 +144,32 @@ serve(async () => {
           .single()
 
         if (!instance) {
-          await supabase.from('message_queue')
-            .update({ status: 'failed', last_error: 'WhatsApp not connected', attempts: msg.attempts + 1 })
-            .eq('id', msg.id)
+          const newAttempts = msg.attempts + 1
+          if (newAttempts >= msg.max_attempts) {
+            // Exhausted retries — mark as failed
+            await supabase.from('message_queue')
+              .update({ status: 'failed', last_error: 'WhatsApp not connected', attempts: newAttempts })
+              .eq('id', msg.id)
+          } else {
+            // Reschedule with backoff (same as API errors)
+            const backoffMinutes = Math.pow(2, newAttempts) * 5
+            const retryAt = new Date(Date.now() + backoffMinutes * 60 * 1000)
+            await supabase.from('message_queue')
+              .update({ status: 'queued', attempts: newAttempts, last_error: 'WhatsApp not connected', scheduled_for: retryAt.toISOString() })
+              .eq('id', msg.id)
+          }
 
-          await supabase.from('alerts').insert({
-            profile_id: msg.profile_id,
-            type: 'message_failed',
-            severity: 'warning',
-            title: 'Falha ao enviar mensagem',
-            description: `WhatsApp não conectado. Mensagem para ${patient.full_name} não enviada.`,
-            patient_id: msg.patient_id,
-          })
+          // Only alert once (first attempt)
+          if (msg.attempts === 0) {
+            await supabase.from('alerts').insert({
+              profile_id: msg.profile_id,
+              type: 'message_failed',
+              severity: 'warning',
+              title: 'Falha ao enviar mensagem',
+              description: `WhatsApp não conectado. Mensagem para ${patient.full_name} será reenviada automaticamente.`,
+              patient_id: msg.patient_id,
+            })
+          }
           continue
         }
 

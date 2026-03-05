@@ -204,9 +204,9 @@ export interface AISettings {
   // Cobrança
   billing_enabled: boolean
   billing_day: number
-  billing_due_days: number
   billing_tone: AITone
   billing_template: string
+  bill_cancelled_sessions: boolean
   // Lembretes
   reminder_enabled: boolean
   reminder_day: number
@@ -226,15 +226,29 @@ export interface AISettings {
   appointment_reminder_template: string
   // Processamento de mídia
   analyze_receipts: boolean
+  receipt_auto_confirm_threshold: number
   analyze_audio: boolean
   analyze_text_intent: boolean
   // Horários
   send_start_hour: number
   send_end_hour: number
   send_on_weekends: boolean
+  send_on_holidays: boolean
   min_seconds_between_messages: number
   max_messages_per_hour: number
   // Meta
+  created_at: string
+  updated_at: string
+}
+
+export interface SessionNote {
+  id: string
+  profile_id: string
+  appointment_id: string
+  patient_id: string
+  content: string | null
+  audio_url: string | null
+  transcription: string | null
   created_at: string
   updated_at: string
 }

@@ -1,11 +1,16 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CalendarDays, CheckCircle2, Clock, XCircle, Ban } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock, XCircle, Ban, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { formatDate, formatTime } from '@/lib/formatters'
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS } from '@/constants'
+import { useSessionNotesByPatient } from '@/hooks/useSessionNotes'
+import SessionNoteDialog from '@/components/patients/SessionNoteDialog'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -20,19 +25,32 @@ import type { Appointment, AppointmentStatus } from '@/types'
 
 interface PatientSessionsProps {
   patientId: string
+  dateRange?: { from: Date; to: Date }
 }
 
-export default function PatientSessions({ patientId }: PatientSessionsProps) {
+export default function PatientSessions({ patientId, dateRange }: PatientSessionsProps) {
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false)
+  const { data: noteIds } = useSessionNotesByPatient(patientId)
+
   const { data: appointments, isLoading } = useQuery({
-    queryKey: ['patient-sessions', patientId],
+    queryKey: ['patient-sessions', patientId, dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('appointments')
         .select('*, patient:patients(full_name)')
         .eq('patient_id', patientId)
         .order('date', { ascending: false })
-        .limit(50)
 
+      if (dateRange) {
+        query = query
+          .gte('date', format(dateRange.from, 'yyyy-MM-dd'))
+          .lte('date', format(dateRange.to, 'yyyy-MM-dd'))
+      } else {
+        query = query.limit(50)
+      }
+
+      const { data, error } = await query
       if (error) throw error
       return data as Appointment[]
     },
@@ -129,10 +147,10 @@ export default function PatientSessions({ patientId }: PatientSessionsProps) {
           <CardContent className="p-8 text-center">
             <CalendarDays className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-sm font-medium text-foreground">
-              Nenhuma sessao registrada
+              Nenhuma sessão registrada
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              As sessoes deste paciente aparecerrao aqui.
+              As sessões deste paciente aparecerão aqui.
             </p>
           </CardContent>
         </Card>
@@ -143,9 +161,10 @@ export default function PatientSessions({ patientId }: PatientSessionsProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Data</TableHead>
-                  <TableHead>Horario</TableHead>
+                  <TableHead>Horário</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Observacoes</TableHead>
+                  <TableHead>Observações</TableHead>
+                  <TableHead className="w-[100px]">Prontuário</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -172,6 +191,23 @@ export default function PatientSessions({ patientId }: PatientSessionsProps) {
                         {appointment.notes || '—'}
                       </span>
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedAppointment(appointment)
+                          setNoteDialogOpen(true)
+                        }}
+                        className="gap-1.5"
+                      >
+                        <FileText className={cn(
+                          'h-4 w-4',
+                          noteIds?.has(appointment.id) ? 'text-primary' : 'text-muted-foreground'
+                        )} />
+                        {noteIds?.has(appointment.id) ? 'Ver' : 'Criar'}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -179,6 +215,11 @@ export default function PatientSessions({ patientId }: PatientSessionsProps) {
           </div>
         </Card>
       )}
+      <SessionNoteDialog
+        open={noteDialogOpen}
+        onOpenChange={setNoteDialogOpen}
+        appointment={selectedAppointment}
+      />
     </motion.div>
   )
 }

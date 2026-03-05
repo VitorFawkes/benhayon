@@ -19,7 +19,6 @@ import {
   Pencil,
   Send,
   CreditCard,
-  ExternalLink,
   Copy,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -293,7 +292,7 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground flex-1"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground shrink-0"
                     onClick={(e) => {
                       e.stopPropagation()
                       navigator.clipboard.writeText(patient.phone)
@@ -301,28 +300,9 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    Copiar
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Copiar telefone</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2.5 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary-light flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/patients/${patient.id}`)
-                    }}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Detalhes
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Ver detalhes completos</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>

@@ -4,14 +4,21 @@ import { useAuth } from '@/contexts/AuthContext'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-export function useDashboardStats() {
+export interface DateRange {
+  from: Date
+  to: Date
+}
+
+export function useDashboardStats(range?: DateRange) {
   const { user } = useAuth()
   const now = new Date()
-  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+  const from = range?.from ?? startOfMonth(now)
+  const to = range?.to ?? endOfMonth(now)
+  const monthStart = format(from, 'yyyy-MM-dd')
+  const monthEnd = format(to, 'yyyy-MM-dd')
 
   return useQuery({
-    queryKey: ['dashboard-stats', user?.id, monthStart],
+    queryKey: ['dashboard-stats', user?.id, monthStart, monthEnd],
     queryFn: async () => {
       const [
         invoicesRes,
@@ -80,14 +87,16 @@ export interface MetricPatient {
   value: string
 }
 
-export function useDashboardDetails(metric: DashboardMetric | null) {
+export function useDashboardDetails(metric: DashboardMetric | null, range?: DateRange) {
   const { user } = useAuth()
   const now = new Date()
-  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+  const from = range?.from ?? startOfMonth(now)
+  const to = range?.to ?? endOfMonth(now)
+  const monthStart = format(from, 'yyyy-MM-dd')
+  const monthEnd = format(to, 'yyyy-MM-dd')
 
   return useQuery({
-    queryKey: ['dashboard-details', user?.id, metric, monthStart],
+    queryKey: ['dashboard-details', user?.id, metric, monthStart, monthEnd],
     queryFn: async (): Promise<MetricPatient[]> => {
       if (!metric) return []
 

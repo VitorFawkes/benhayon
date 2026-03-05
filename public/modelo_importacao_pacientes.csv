@@ -1,0 +1,4 @@
+nome_completo,telefone,email,valor_sessao,tipo_pagamento,status,observacoes
+Maria Silva,+5511999999999,maria@email.com,250,particular,active,Paciente regular
+João Santos,+5521988888888,joao@email.com,300,particular,active,
+Ana Costa,+5531977777777,,200,clinic,active,Convênio XYZ

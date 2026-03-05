@@ -35,6 +35,7 @@ export default function AISettings() {
   useEffect(() => {
     if (settings) setLocal({
       ...settings,
+      bill_cancelled_sessions: settings.bill_cancelled_sessions ?? true,
       reminder_day: settings.reminder_day ?? 10,
       reminder_repeat_enabled: settings.reminder_repeat_enabled ?? false,
       reminder_repeat_interval_days: settings.reminder_repeat_interval_days ?? 5,
@@ -62,8 +63,36 @@ export default function AISettings() {
 
   const handleSave = () => {
     if (!local) return
-    const { id, profile_id, created_at, updated_at, ...updates } = local
-    updateSettings.mutate(updates)
+    // Whitelist: only send fields that exist in the AI settings form
+    updateSettings.mutate({
+      billing_enabled: local.billing_enabled,
+      billing_day: local.billing_day,
+      billing_tone: local.billing_tone,
+      billing_template: local.billing_template,
+      bill_cancelled_sessions: local.bill_cancelled_sessions,
+      reminder_enabled: local.reminder_enabled,
+      reminder_day: local.reminder_day,
+      reminder_1_tone: local.reminder_1_tone,
+      reminder_1_template: local.reminder_1_template,
+      reminder_repeat_enabled: local.reminder_repeat_enabled,
+      reminder_repeat_interval_days: local.reminder_repeat_interval_days,
+      reminder_max_count: local.reminder_max_count,
+      thank_you_enabled: local.thank_you_enabled,
+      thank_you_tone: local.thank_you_tone,
+      thank_you_template: local.thank_you_template,
+      appointment_reminder_enabled: local.appointment_reminder_enabled,
+      appointment_reminder_hours_before: local.appointment_reminder_hours_before,
+      appointment_reminder_tone: local.appointment_reminder_tone,
+      appointment_reminder_template: local.appointment_reminder_template,
+      analyze_receipts: local.analyze_receipts,
+      analyze_audio: local.analyze_audio,
+      analyze_text_intent: local.analyze_text_intent,
+      send_start_hour: local.send_start_hour,
+      send_end_hour: local.send_end_hour,
+      send_on_weekends: local.send_on_weekends,
+      min_seconds_between_messages: local.min_seconds_between_messages,
+      max_messages_per_hour: local.max_messages_per_hour,
+    })
   }
 
   const toggleSection = (section: string) => {
@@ -117,6 +146,13 @@ export default function AISettings() {
             className="w-32 h-10 px-3 rounded-lg border border-input bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
           />
           <p className="text-xs text-muted-foreground mt-1">Dia do mês para gerar e enviar cobranças</p>
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 mb-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Cobrar sessões canceladas</p>
+            <p className="text-xs text-muted-foreground">Inclui cancelamentos na cobrança (política de no-show)</p>
+          </div>
+          <Toggle checked={local.bill_cancelled_sessions} onChange={(v) => update('bill_cancelled_sessions', v)} />
         </div>
         <ToneSelector value={local.billing_tone} onChange={(v) => update('billing_tone', v)} />
         <TemplateEditor

@@ -304,6 +304,9 @@ export function RecurringForm({ open, onOpenChange }: RecurringFormProps) {
               <p className="text-sm text-foreground">
                 Serão criados <strong>{preview.count} agendamentos</strong> até{' '}
                 <strong>{preview.lastDate}</strong>
+                {!endsAt && (
+                  <span className="text-muted-foreground"> (sem data final — criando as próximas {preview.count} sessões)</span>
+                )}
               </p>
             </div>
           )}

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import type { Invoice, InvoiceStatus } from '@/types'
+import type { Invoice, InvoiceStatus, AppointmentStatus } from '@/types'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 // ─── Filter Types ───
@@ -12,6 +12,11 @@ export interface InvoiceFilters {
   patient_id?: string | null
 }
 
+export interface InvoicePreviewSession {
+  date: string
+  status: AppointmentStatus
+}
+
 export interface InvoicePreviewItem {
   patient_id: string
   patient_name: string
@@ -20,6 +25,7 @@ export interface InvoicePreviewItem {
   total_amount: number
   due_date: string
   already_has_invoice: boolean
+  sessions: InvoicePreviewSession[]
 }
 
 // ─── Query Keys ───
@@ -94,11 +100,11 @@ export function useInvoicePreview(month: Date | null) {
       const monthStart = format(startOfMonth(month), 'yyyy-MM-dd')
       const monthEnd = format(endOfMonth(month), 'yyyy-MM-dd')
 
-      // Buscar consultas realizadas no mês
+      // Buscar consultas realizadas/canceladas no mês
       const { data: appointments, error: appError } = await supabase
         .from('appointments')
-        .select('patient_id, patient:patients(id, full_name, session_value)')
-        .eq('status', 'completed')
+        .select('patient_id, date, status, patient:patients(id, full_name, session_value)')
+        .in('status', ['completed', 'cancelled'])
         .gte('date', monthStart)
         .lte('date', monthEnd)
         .eq('profile_id', user.id)
@@ -138,10 +144,16 @@ export function useInvoicePreview(month: Date | null) {
         const patient = apt.patient as unknown as { id: string; full_name: string; session_value: number }
         if (!patient) continue
 
+        const session: InvoicePreviewSession = {
+          date: (apt as unknown as { date: string }).date,
+          status: (apt as unknown as { status: AppointmentStatus }).status,
+        }
+
         const existing = grouped.get(apt.patient_id)
         if (existing) {
           existing.sessions_count += 1
           existing.total_amount += patient.session_value
+          existing.sessions.push(session)
         } else {
           grouped.set(apt.patient_id, {
             patient_id: apt.patient_id,
@@ -151,6 +163,7 @@ export function useInvoicePreview(month: Date | null) {
             total_amount: patient.session_value,
             due_date: dueDateStr,
             already_has_invoice: existingPatientIds.has(apt.patient_id),
+            sessions: [session],
           })
         }
       }
