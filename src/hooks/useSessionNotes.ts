@@ -51,9 +51,10 @@ export function useSessionNotesByPatient(patientId: string) {
         .from('session_notes')
         .select('appointment_id')
         .eq('patient_id', patientId)
+        .not('appointment_id', 'is', null)
 
       if (error) throw error
-      return new Set((data ?? []).map((n: { appointment_id: string }) => n.appointment_id))
+      return new Set((data ?? []).map((n: { appointment_id: string | null }) => n.appointment_id as string))
     },
     enabled: !!patientId,
   })
@@ -65,13 +66,15 @@ export function useUpsertSessionNote() {
 
   return useMutation({
     mutationFn: async ({
+      noteId,
       appointmentId,
       patientId,
       content,
       audioUrl,
       transcription,
     }: {
-      appointmentId: string
+      noteId?: string
+      appointmentId: string | null
       patientId: string
       content?: string | null
       audioUrl?: string | null
@@ -79,19 +82,41 @@ export function useUpsertSessionNote() {
     }) => {
       if (!user) throw new Error('Não autenticado')
 
+      const payload = {
+        profile_id: user.id,
+        appointment_id: appointmentId,
+        patient_id: patientId,
+        content: content ?? null,
+        audio_url: audioUrl ?? null,
+        transcription: transcription ?? null,
+      }
+
+      // Standalone notes (no appointment) — use insert/update by ID
+      if (!appointmentId) {
+        if (noteId) {
+          const { data, error } = await supabase
+            .from('session_notes')
+            .update(payload)
+            .eq('id', noteId)
+            .select()
+            .single()
+          if (error) throw error
+          return data as SessionNote
+        } else {
+          const { data, error } = await supabase
+            .from('session_notes')
+            .insert(payload)
+            .select()
+            .single()
+          if (error) throw error
+          return data as SessionNote
+        }
+      }
+
+      // With appointment — upsert on conflict
       const { data, error } = await supabase
         .from('session_notes')
-        .upsert(
-          {
-            profile_id: user.id,
-            appointment_id: appointmentId,
-            patient_id: patientId,
-            content: content ?? null,
-            audio_url: audioUrl ?? null,
-            transcription: transcription ?? null,
-          },
-          { onConflict: 'appointment_id' }
-        )
+        .upsert(payload, { onConflict: 'appointment_id' })
         .select()
         .single()
 
@@ -99,13 +124,68 @@ export function useUpsertSessionNote() {
       return data as SessionNote
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: sessionNoteKeys.detail(data.appointment_id) })
+      if (data.appointment_id) {
+        queryClient.invalidateQueries({ queryKey: sessionNoteKeys.detail(data.appointment_id) })
+      }
+      if (data.id) {
+        queryClient.invalidateQueries({ queryKey: ['session-note-by-id', data.id] })
+      }
       queryClient.invalidateQueries({ queryKey: sessionNoteKeys.all })
       queryClient.invalidateQueries({ queryKey: ['session-note-previous'] })
       queryClient.invalidateQueries({ queryKey: ['appointments', 'completed-without-notes'] })
+      queryClient.invalidateQueries({ queryKey: ['appointments', 'available-for-notes'] })
     },
     onError: (error) => {
       toast.error('Erro ao salvar prontuário', { description: error.message })
+    },
+  })
+}
+
+/** Load a session note by its own ID (for standalone notes) */
+export function useSessionNoteById(noteId: string | undefined) {
+  return useQuery({
+    queryKey: ['session-note-by-id', noteId!],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('session_notes')
+        .select('*')
+        .eq('id', noteId!)
+        .maybeSingle()
+
+      if (error) throw error
+      return data as SessionNote | null
+    },
+    enabled: !!noteId,
+  })
+}
+
+/** Link a standalone note to an appointment */
+export function useLinkNoteToAppointment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ noteId, appointmentId }: { noteId: string; appointmentId: string }) => {
+      const { data, error } = await supabase
+        .from('session_notes')
+        .update({ appointment_id: appointmentId })
+        .eq('id', noteId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as SessionNote
+    },
+    onSuccess: (data) => {
+      if (data.appointment_id) {
+        queryClient.invalidateQueries({ queryKey: sessionNoteKeys.detail(data.appointment_id) })
+      }
+      queryClient.invalidateQueries({ queryKey: ['session-note-by-id', data.id] })
+      queryClient.invalidateQueries({ queryKey: sessionNoteKeys.all })
+      queryClient.invalidateQueries({ queryKey: ['appointments', 'completed-without-notes'] })
+      queryClient.invalidateQueries({ queryKey: ['appointments', 'available-for-notes'] })
+    },
+    onError: (error) => {
+      toast.error('Erro ao vincular prontuário', { description: error.message })
     },
   })
 }
@@ -117,6 +197,7 @@ export function useAllSessionNotes(filters: SessionNoteFilters = {}) {
   return useQuery({
     queryKey: sessionNoteKeys.list(filters),
     queryFn: async () => {
+      // Left join on appointments (nullable appointment_id)
       let query = supabase
         .from('session_notes')
         .select('*, patient:patients(id, full_name, phone), appointment:appointments(id, date, start_time, end_time, status)')
@@ -151,6 +232,7 @@ export function usePatientTimeline(patientId: string, search?: string) {
   return useQuery({
     queryKey: sessionNoteKeys.timeline(patientId, search),
     queryFn: async () => {
+      // Left join on appointments (nullable appointment_id)
       let query = supabase
         .from('session_notes')
         .select('*, appointment:appointments(id, date, start_time, end_time, status)')
@@ -195,11 +277,11 @@ export function usePreviousSessionNote(patientId?: string, currentDate?: string)
     queryKey: sessionNoteKeys.previous(patientId, currentDate),
     queryFn: async () => {
       // Fetch recent notes with appointment dates, then filter client-side
-      // (PostgREST doesn't support filtering on joined columns directly)
       const { data, error } = await supabase
         .from('session_notes')
-        .select('*, appointment:appointments!inner(id, date, start_time, end_time, status)')
+        .select('*, appointment:appointments(id, date, start_time, end_time, status)')
         .eq('patient_id', patientId!)
+        .not('appointment_id', 'is', null)
         .order('created_at', { ascending: false })
         .limit(20)
 

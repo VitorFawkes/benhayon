@@ -122,6 +122,41 @@ export function useCompletedWithoutNotes(patientId: string | null) {
   })
 }
 
+/** All scheduled/completed appointments without notes — for "Criar Prontuário" with session linking */
+export function useAvailableForNotes(patientId: string | null) {
+  return useQuery({
+    queryKey: [...appointmentKeys.all, 'available-for-notes', patientId!],
+    queryFn: async () => {
+      // 1) Get scheduled + completed appointments for this patient
+      const { data: appointments, error: aptErr } = await supabase
+        .from('appointments')
+        .select('*, patient:patients(id, full_name, phone)')
+        .eq('patient_id', patientId!)
+        .in('status', ['scheduled', 'completed'])
+        .order('date', { ascending: false })
+        .limit(50)
+
+      if (aptErr) throw aptErr
+      if (!appointments || appointments.length === 0) return [] as Appointment[]
+
+      // 2) Check which ones already have notes
+      const ids = appointments.map((a) => a.id)
+      const { data: noteRows, error: noteErr } = await supabase
+        .from('session_notes')
+        .select('appointment_id')
+        .in('appointment_id', ids)
+
+      if (noteErr) throw noteErr
+
+      const withNotes = new Set((noteRows ?? []).map((n: { appointment_id: string }) => n.appointment_id))
+
+      // 3) Return only those WITHOUT notes
+      return appointments.filter((a) => !withNotes.has(a.id)) as Appointment[]
+    },
+    enabled: !!patientId,
+  })
+}
+
 export function useDeleteAppointment() {
   const queryClient = useQueryClient()
 

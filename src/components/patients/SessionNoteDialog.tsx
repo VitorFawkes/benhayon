@@ -10,17 +10,23 @@ import {
   History,
   ChevronDown,
   ExternalLink,
+  Link2,
+  Calendar,
+  Clock,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   useSessionNote,
+  useSessionNoteById,
   useUpsertSessionNote,
   usePreviousSessionNote,
+  useLinkNoteToAppointment,
 } from '@/hooks/useSessionNotes'
-import { useUpdateAppointment } from '@/hooks/useAppointments'
+import { useAvailableForNotes, useUpdateAppointment } from '@/hooks/useAppointments'
 import { formatDate, formatTime } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -53,15 +59,34 @@ function formatRecordingTime(seconds: number) {
   return `${m}:${s}`
 }
 
+/** Draft key: prefer appointmentId, fall back to noteId, then patientId */
+function getDraftKey(target: SessionNoteTarget | null): string | null {
+  if (!target) return null
+  return target.appointmentId ?? target.noteId ?? `standalone-${target.patientId}`
+}
+
 export default function SessionNoteDialog({ open, onOpenChange, target }: SessionNoteDialogProps) {
   const navigate = useNavigate()
-  const { data: note, isLoading } = useSessionNote(open ? target?.appointmentId : undefined)
+  const isStandalone = !target?.appointmentId
+
+  // Load note by appointment_id (normal) or by noteId (standalone/edit)
+  const { data: noteByAppointment, isLoading: loadingByApt } = useSessionNote(
+    open && target?.appointmentId ? target.appointmentId : undefined
+  )
+  const { data: noteById, isLoading: loadingById } = useSessionNoteById(
+    open && !target?.appointmentId && target?.noteId ? target.noteId : undefined
+  )
+
+  const note = noteByAppointment ?? noteById
+  const isLoading = loadingByApt || loadingById
+
   const { data: previousNote } = usePreviousSessionNote(
     open ? target?.patientId : undefined,
-    open ? target?.date : undefined
+    open && target?.date ? target.date : undefined
   )
   const upsertNote = useUpsertSessionNote()
   const updateAppointment = useUpdateAppointment()
+  const linkNote = useLinkNoteToAppointment()
 
   const [content, setContent] = useState('')
   const [audioPath, setAudioPath] = useState<string | null>(null)
@@ -72,6 +97,8 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [previousExpanded, setPreviousExpanded] = useState(true)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [showLinkPanel, setShowLinkPanel] = useState(false)
+  const [currentNoteId, setCurrentNoteId] = useState<string | null>(null)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -80,12 +107,15 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
   const contentRef = useRef(content)
   contentRef.current = content
 
+  const draftKey = getDraftKey(target)
+
   // ─── Load existing note + localStorage draft recovery ───
   useEffect(() => {
     if (note) {
       setContent(note.content ?? '')
       setAudioPath(note.audio_url)
       setTranscription(note.transcription)
+      setCurrentNoteId(note.id)
 
       if (note.audio_url) {
         getSignedAudioUrl(note.audio_url).then(setAudioPlayUrl)
@@ -93,31 +123,35 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
         setAudioPlayUrl(null)
       }
       // Clear draft since DB has data
-      if (target?.appointmentId) {
-        localStorage.removeItem(DRAFT_PREFIX + target.appointmentId)
+      if (draftKey) {
+        localStorage.removeItem(DRAFT_PREFIX + draftKey)
       }
-    } else if (target?.appointmentId) {
+    } else if (draftKey) {
       // No note in DB — try localStorage draft
-      const draft = localStorage.getItem(DRAFT_PREFIX + target.appointmentId)
+      const draft = localStorage.getItem(DRAFT_PREFIX + draftKey)
       setContent(draft ?? '')
       setAudioPath(null)
       setAudioPlayUrl(null)
       setTranscription(null)
+      setCurrentNoteId(null)
     } else {
       setContent('')
       setAudioPath(null)
       setAudioPlayUrl(null)
       setTranscription(null)
+      setCurrentNoteId(null)
     }
-  }, [note, target?.appointmentId])
+  }, [note, draftKey])
 
   // ─── Flush pending save + cleanup when dialog closes ───
   useEffect(() => {
     if (!open && saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
-      // Flush pending content to DB so nothing is lost
       saveContent(contentRef.current)
+    }
+    if (!open) {
+      setShowLinkPanel(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -139,12 +173,12 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
   }, [isRecording])
 
   // ─── Save logic ───
-  // upsertNote.mutate is stable in TanStack Query v5, safe to omit from deps
   const saveContent = useCallback(
     (text: string) => {
       if (!target) return
       upsertNote.mutate(
         {
+          noteId: currentNoteId ?? undefined,
           appointmentId: target.appointmentId,
           patientId: target.patientId,
           content: text || null,
@@ -152,23 +186,22 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
           transcription,
         },
         {
-          onSuccess: () => {
-            localStorage.removeItem(DRAFT_PREFIX + target.appointmentId)
+          onSuccess: (data) => {
+            if (draftKey) localStorage.removeItem(DRAFT_PREFIX + draftKey)
+            if (!currentNoteId && data?.id) setCurrentNoteId(data.id)
           },
         }
       )
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target, audioPath, transcription]
+    [target, audioPath, transcription, currentNoteId, draftKey]
   )
 
   const handleContentChange = (text: string) => {
     setContent(text)
-    // Save draft to localStorage immediately
-    if (target?.appointmentId) {
-      localStorage.setItem(DRAFT_PREFIX + target.appointmentId, text)
+    if (draftKey) {
+      localStorage.setItem(DRAFT_PREFIX + draftKey, text)
     }
-    // Debounced auto-save to DB
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => saveContent(text), 1500)
   }
@@ -227,7 +260,8 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
 
     setIsUploading(true)
     try {
-      const fileName = `${target.appointmentId}_${Date.now()}.webm`
+      const fileId = target.appointmentId ?? currentNoteId ?? Date.now().toString()
+      const fileName = `${fileId}_${Date.now()}.webm`
       const path = `${target.patientId}/${fileName}`
 
       const { error: uploadError } = await supabase.storage
@@ -242,13 +276,21 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
       setAudioPath(path)
       setAudioPlayUrl(signedUrl)
 
-      upsertNote.mutate({
-        appointmentId: target.appointmentId,
-        patientId: target.patientId,
-        content: contentRef.current || null,
-        audioUrl: path,
-        transcription,
-      })
+      upsertNote.mutate(
+        {
+          noteId: currentNoteId ?? undefined,
+          appointmentId: target.appointmentId,
+          patientId: target.patientId,
+          content: contentRef.current || null,
+          audioUrl: path,
+          transcription,
+        },
+        {
+          onSuccess: (data) => {
+            if (!currentNoteId && data?.id) setCurrentNoteId(data.id)
+          },
+        }
+      )
 
       toast.success('Áudio salvo com sucesso')
       await transcribeAudio(path, signedUrl)
@@ -274,6 +316,7 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
       setTranscription(text)
 
       upsertNote.mutate({
+        noteId: currentNoteId ?? undefined,
         appointmentId: target.appointmentId,
         patientId: target.patientId,
         content: contentRef.current || null,
@@ -297,12 +340,20 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Prontuário da Sessão
+            {isStandalone ? 'Prontuário Avulso' : 'Prontuário da Sessão'}
           </DialogTitle>
           <DialogDescription className="flex items-center justify-between">
             <span>
-              {formatDate(target.date)} — {formatTime(target.startTime)} a{' '}
-              {formatTime(target.endTime)}
+              {isStandalone ? (
+                <>
+                  {target.patientName ?? 'Paciente'} — Sem sessão vinculada
+                </>
+              ) : (
+                <>
+                  {formatDate(target.date!)} — {formatTime(target.startTime!)} a{' '}
+                  {formatTime(target.endTime!)}
+                </>
+              )}
             </span>
             <button
               type="button"
@@ -332,7 +383,8 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
                   className="flex items-center gap-2 text-sm font-medium text-primary w-full text-left"
                 >
                   <History className="h-4 w-4 shrink-0" />
-                  Sessão anterior — {formatDate(previousNote.appointment?.date ?? previousNote.created_at)}
+                  Sessão anterior —{' '}
+                  {formatDate(previousNote.appointment?.date ?? previousNote.created_at)}
                   <ChevronDown
                     className={cn(
                       'h-4 w-4 ml-auto transition-transform shrink-0',
@@ -379,9 +431,7 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
 
             {/* Audio recording */}
             <div>
-              <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Áudio
-              </label>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">Áudio</label>
               <div className="flex items-center gap-2">
                 {isRecording ? (
                   <Button variant="destructive" size="sm" onClick={stopRecording}>
@@ -442,8 +492,8 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
               </div>
             )}
 
-            {/* Complete session action */}
-            {target.status === 'scheduled' && (
+            {/* Complete session action (only when linked to a scheduled appointment) */}
+            {!isStandalone && target.status === 'scheduled' && (
               <div className="pt-3 border-t border-border">
                 <Button
                   className="w-full gap-2"
@@ -453,7 +503,7 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
                       saveContent(content)
                     }
                     updateAppointment.mutate(
-                      { id: target.appointmentId, status: 'completed' },
+                      { id: target.appointmentId!, status: 'completed' },
                       {
                         onSuccess: () => {
                           toast.success('Sessão concluída')
@@ -475,7 +525,7 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
               </div>
             )}
 
-            {target.status === 'completed' && (
+            {!isStandalone && target.status === 'completed' && (
               <div className="pt-3 border-t border-border">
                 <div className="flex items-center gap-2 text-sm text-success justify-center">
                   <CheckCircle2 className="h-4 w-4" />
@@ -483,9 +533,120 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
                 </div>
               </div>
             )}
+
+            {/* Link to session (only for standalone notes) */}
+            {isStandalone && (
+              <div className="pt-3 border-t border-border">
+                {!showLinkPanel ? (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => setShowLinkPanel(true)}
+                    disabled={!currentNoteId}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    Vincular a uma sessão
+                  </Button>
+                ) : (
+                  <LinkToSessionPanel
+                    patientId={target.patientId}
+                    noteId={currentNoteId!}
+                    onLink={(appointmentId) => {
+                      linkNote.mutate(
+                        { noteId: currentNoteId!, appointmentId },
+                        {
+                          onSuccess: () => {
+                            toast.success('Prontuário vinculado à sessão')
+                            onOpenChange(false)
+                          },
+                        }
+                      )
+                    }}
+                    onCancel={() => setShowLinkPanel(false)}
+                    isLinking={linkNote.isPending}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+function LinkToSessionPanel({
+  patientId,
+  onLink,
+  onCancel,
+  isLinking,
+}: {
+  patientId: string
+  noteId: string
+  onLink: (appointmentId: string) => void
+  onCancel: () => void
+  isLinking: boolean
+}) {
+  const { data: appointments, isLoading } = useAvailableForNotes(patientId)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-foreground">Selecione a sessão</p>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs text-primary hover:underline"
+        >
+          Cancelar
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-3 justify-center">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Buscando sessões...
+        </div>
+      ) : !appointments || appointments.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-3">
+          Nenhuma sessão disponível.
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+          {appointments.map((apt) => (
+            <button
+              key={apt.id}
+              type="button"
+              onClick={() => onLink(apt.id)}
+              disabled={isLinking}
+              className="w-full text-left p-2.5 rounded-lg border border-border bg-surface hover:bg-primary/5 hover:border-primary/30 transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-medium text-foreground">
+                  {formatDate(apt.date)}
+                </span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {formatTime(apt.start_time)} - {formatTime(apt.end_time)}
+                </span>
+                {apt.status === 'completed' ? (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] gap-1 text-success border-success/30 ml-auto"
+                  >
+                    <CheckCircle2 className="h-3 w-3" /> Concluída
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] ml-auto">
+                    Agendada
+                  </Badge>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

@@ -244,7 +244,7 @@ export interface AISettings {
 export interface SessionNote {
   id: string
   profile_id: string
-  appointment_id: string
+  appointment_id: string | null
   patient_id: string
   content: string | null
   audio_url: string | null
@@ -255,12 +255,15 @@ export interface SessionNote {
 
 // Interface estreita para SessionNoteDialog (desacoplada de Appointment)
 export interface SessionNoteTarget {
-  appointmentId: string
+  appointmentId: string | null
   patientId: string
-  date: string
-  startTime: string
-  endTime: string
-  status: AppointmentStatus
+  patientName?: string
+  date: string | null
+  startTime: string | null
+  endTime: string | null
+  status: AppointmentStatus | null
+  /** ID de uma nota existente (para standalone notes) */
+  noteId?: string
 }
 
 // Nota enriquecida com joins (para listagens)

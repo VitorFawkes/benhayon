@@ -54,15 +54,28 @@ export default function Prontuarios() {
   const { data: patients } = usePatients()
 
   function openNote(note: SessionNoteWithDetails) {
-    if (!note.appointment) return
-    setNoteTarget({
-      appointmentId: note.appointment_id,
-      patientId: note.patient_id,
-      date: note.appointment.date,
-      startTime: note.appointment.start_time,
-      endTime: note.appointment.end_time,
-      status: note.appointment.status,
-    })
+    if (note.appointment) {
+      setNoteTarget({
+        appointmentId: note.appointment_id,
+        patientId: note.patient_id,
+        date: note.appointment.date,
+        startTime: note.appointment.start_time,
+        endTime: note.appointment.end_time,
+        status: note.appointment.status,
+      })
+    } else {
+      // Standalone note (no appointment linked)
+      setNoteTarget({
+        appointmentId: null,
+        patientId: note.patient_id,
+        patientName: note.patient?.full_name ?? 'Paciente',
+        date: null,
+        startTime: null,
+        endTime: null,
+        status: null,
+        noteId: note.id,
+      })
+    }
     setNoteDialogOpen(true)
   }
 
@@ -198,6 +211,9 @@ export default function Prontuarios() {
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {!note.appointment && (
+                          <Badge variant="outline" className="text-[10px]">Avulso</Badge>
+                        )}
                         {note.audio_url && (
                           <Badge variant="outline" className="text-[10px] gap-1">
                             <Mic className="h-3 w-3" /> Áudio

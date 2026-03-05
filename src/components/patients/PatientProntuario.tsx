@@ -42,15 +42,27 @@ export default function PatientProntuario({ patientId }: PatientProntuarioProps)
   const { data: notes, isLoading } = usePatientTimeline(patientId, debouncedSearch || undefined)
 
   function openNote(note: SessionNoteWithDetails) {
-    if (!note.appointment) return
-    setNoteTarget({
-      appointmentId: note.appointment_id,
-      patientId: note.patient_id,
-      date: note.appointment.date,
-      startTime: note.appointment.start_time,
-      endTime: note.appointment.end_time,
-      status: note.appointment.status,
-    })
+    if (note.appointment) {
+      setNoteTarget({
+        appointmentId: note.appointment_id,
+        patientId: note.patient_id,
+        date: note.appointment.date,
+        startTime: note.appointment.start_time,
+        endTime: note.appointment.end_time,
+        status: note.appointment.status,
+      })
+    } else {
+      setNoteTarget({
+        appointmentId: null,
+        patientId: note.patient_id,
+        patientName: undefined,
+        date: null,
+        startTime: null,
+        endTime: null,
+        status: null,
+        noteId: note.id,
+      })
+    }
     setNoteDialogOpen(true)
   }
 
@@ -121,10 +133,12 @@ export default function PatientProntuario({ patientId }: PatientProntuarioProps)
                       <span className="text-sm font-medium text-foreground">
                         {formatDate(note.appointment?.date ?? note.created_at)}
                       </span>
-                      {note.appointment && (
+                      {note.appointment ? (
                         <span className="text-xs text-muted-foreground">
                           {formatTime(note.appointment.start_time)} - {formatTime(note.appointment.end_time)}
                         </span>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px]">Avulso</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
