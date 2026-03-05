@@ -10,6 +10,8 @@ const appointmentKeys = {
   lists: () => [...appointmentKeys.all, 'list'] as const,
   list: (startDate: string, endDate: string) =>
     [...appointmentKeys.lists(), { startDate, endDate }] as const,
+  completedWithoutNotes: (patientId: string) =>
+    [...appointmentKeys.all, 'completed-without-notes', patientId] as const,
 }
 
 // ─── Hooks ───
@@ -81,6 +83,42 @@ export function useUpdateAppointment() {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.all })
       queryClient.invalidateQueries({ queryKey: ['patient-sessions'] })
     },
+  })
+}
+
+/** Completed appointments that don't have a session note yet — for "Criar Prontuário" flow */
+export function useCompletedWithoutNotes(patientId: string | null) {
+  return useQuery({
+    queryKey: appointmentKeys.completedWithoutNotes(patientId!),
+    queryFn: async () => {
+      // 1) Get completed appointments for this patient
+      const { data: appointments, error: aptErr } = await supabase
+        .from('appointments')
+        .select('*, patient:patients(id, full_name, phone)')
+        .eq('patient_id', patientId!)
+        .eq('status', 'completed')
+        .order('date', { ascending: false })
+        .limit(50)
+
+      if (aptErr) throw aptErr
+
+      if (!appointments || appointments.length === 0) return [] as Appointment[]
+
+      // 2) Check which ones already have notes
+      const ids = appointments.map((a) => a.id)
+      const { data: noteRows, error: noteErr } = await supabase
+        .from('session_notes')
+        .select('appointment_id')
+        .in('appointment_id', ids)
+
+      if (noteErr) throw noteErr
+
+      const withNotes = new Set((noteRows ?? []).map((n: { appointment_id: string }) => n.appointment_id))
+
+      // 3) Return only those WITHOUT notes
+      return appointments.filter((a) => !withNotes.has(a.id)) as Appointment[]
+    },
+    enabled: !!patientId,
   })
 }
 

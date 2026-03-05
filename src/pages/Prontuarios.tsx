@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Search, FileText, Mic, FileType } from 'lucide-react'
+import { Search, FileText, Mic, FileType, Plus } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,6 +18,7 @@ import {
 import { useAllSessionNotes } from '@/hooks/useSessionNotes'
 import { usePatients } from '@/hooks/usePatients'
 import SessionNoteDialog from '@/components/patients/SessionNoteDialog'
+import CreateProntuarioDialog from '@/components/patients/CreateProntuarioDialog'
 import { formatDate, formatTime } from '@/lib/formatters'
 import type { SessionNoteTarget, SessionNoteWithDetails } from '@/types'
 
@@ -30,6 +32,9 @@ export default function Prontuarios() {
   // Note dialog
   const [noteDialogOpen, setNoteDialogOpen] = useState(false)
   const [noteTarget, setNoteTarget] = useState<SessionNoteTarget | null>(null)
+
+  // Create dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   // Debounced search
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +77,10 @@ export default function Prontuarios() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-foreground">Prontuários</h1>
+        <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline ml-1">Criar Prontuário</span>
+        </Button>
       </div>
 
       {/* Search (prominent) */}
@@ -213,6 +222,15 @@ export default function Prontuarios() {
         open={noteDialogOpen}
         onOpenChange={setNoteDialogOpen}
         target={noteTarget}
+      />
+
+      <CreateProntuarioDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSelectTarget={(target) => {
+          setNoteTarget(target)
+          setNoteDialogOpen(true)
+        }}
       />
     </motion.div>
   )
