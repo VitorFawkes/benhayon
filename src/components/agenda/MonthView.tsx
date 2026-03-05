@@ -77,7 +77,7 @@ export function MonthView({ selectedDate, appointments, onDayClick }: MonthViewP
       </div>
 
       {/* Calendar grid */}
-      <div className="flex-1 grid grid-rows-[repeat(auto-fill,minmax(0,1fr))]">
+      <div className="flex-1 grid" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(80px, 1fr))` }}>
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-7 border-b border-border/50 last:border-b-0">
             {week.map((day) => {
@@ -92,7 +92,7 @@ export function MonthView({ selectedDate, appointments, onDayClick }: MonthViewP
                   type="button"
                   onClick={() => onDayClick(day)}
                   className={cn(
-                    'relative flex flex-col items-start p-1.5 min-h-[80px] border-r border-border/30 last:border-r-0 transition-colors hover:bg-primary/5 active:bg-primary/10 cursor-pointer text-left',
+                    'relative flex flex-col items-start p-1.5 border-r border-border/30 last:border-r-0 transition-colors hover:bg-primary/5 active:bg-primary/10 cursor-pointer text-left',
                     !isCurrentMonth && 'opacity-40'
                   )}
                 >
