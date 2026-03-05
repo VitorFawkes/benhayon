@@ -113,15 +113,31 @@ export function useUpsertSessionNote() {
         }
       }
 
-      // With appointment — upsert on conflict
-      const { data, error } = await supabase
+      // With appointment — check if note already exists, then insert or update
+      const { data: existing } = await supabase
         .from('session_notes')
-        .upsert(payload, { onConflict: 'appointment_id' })
-        .select()
-        .single()
+        .select('id')
+        .eq('appointment_id', appointmentId)
+        .maybeSingle()
 
-      if (error) throw error
-      return data as SessionNote
+      if (existing) {
+        const { data, error } = await supabase
+          .from('session_notes')
+          .update(payload)
+          .eq('id', existing.id)
+          .select()
+          .single()
+        if (error) throw error
+        return data as SessionNote
+      } else {
+        const { data, error } = await supabase
+          .from('session_notes')
+          .insert(payload)
+          .select()
+          .single()
+        if (error) throw error
+        return data as SessionNote
+      }
     },
     onSuccess: (data) => {
       if (data.appointment_id) {
