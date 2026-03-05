@@ -35,22 +35,22 @@ import { formatCurrency, formatPhone, formatDate } from '@/lib/formatters'
 import { PATIENT_STATUS_COLORS } from '@/constants'
 import { supabase } from '@/lib/supabase'
 import type { Patient } from '@/types'
-import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { format } from 'date-fns'
 
 interface PatientCardProps {
   patient: Patient
   index: number
+  monthStart: string
+  monthEnd: string
+  monthLabel: string
 }
 
-export default function PatientCard({ patient, index }: PatientCardProps) {
+export default function PatientCard({ patient, index, monthStart, monthEnd, monthLabel }: PatientCardProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editOpen, setEditOpen] = useState(false)
 
-  const now = new Date()
-  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
-  const today = format(now, 'yyyy-MM-dd')
+  const today = format(new Date(), 'yyyy-MM-dd')
 
   const { data: stats } = useQuery({
     queryKey: ['patient-card-stats', patient.id, monthStart],
@@ -142,7 +142,7 @@ export default function PatientCard({ patient, index }: PatientCardProps) {
               </div>
               <div className="bg-surface p-2.5 text-center">
                 <Clock className="h-3.5 w-3.5 mx-auto text-secondary/60 mb-1" />
-                <p className="text-[10px] text-muted-foreground">Sessões/mês</p>
+                <p className="text-[10px] text-muted-foreground capitalize">Sessões <span className="opacity-70">({monthLabel.split(' ')[0]?.slice(0, 3)})</span></p>
                 <p className="text-xs font-medium text-foreground">
                   {stats.monthSessions}
                   {stats.noShows > 0 && <span className="text-destructive ml-1">({stats.noShows} falta{stats.noShows > 1 ? 's' : ''})</span>}

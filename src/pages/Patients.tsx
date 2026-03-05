@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Users, Upload } from 'lucide-react'
+import { Plus, Users, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
+import { subMonths, addMonths, format, startOfMonth, endOfMonth } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import PatientCard from '@/components/patients/PatientCard'
@@ -17,6 +19,11 @@ export default function Patients() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<PatientStatus | null>(null)
   const [typeFilter, setTypeFilter] = useState<PatientPaymentType | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState(new Date())
+
+  const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd')
+  const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd')
+  const monthLabel = format(selectedMonth, 'MMMM yyyy', { locale: ptBR })
 
   // Debounce search
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,6 +66,33 @@ export default function Patients() {
             Novo paciente
           </Button>
         </div>
+      </div>
+
+      {/* Month selector */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setSelectedMonth((m) => subMonths(m, 1))}
+          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-medium text-foreground capitalize min-w-[120px] text-center">
+          {monthLabel}
+        </span>
+        <button
+          onClick={() => setSelectedMonth((m) => addMonths(m, 1))}
+          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        {format(selectedMonth, 'yyyy-MM') !== format(new Date(), 'yyyy-MM') && (
+          <button
+            onClick={() => setSelectedMonth(new Date())}
+            className="text-xs text-primary hover:underline ml-1"
+          >
+            Mês atual
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -118,7 +152,7 @@ export default function Patients() {
       {!isLoading && resultCount > 0 && (
         <div className="grid grid-cols-1 gap-4">
           {patients!.map((patient, index) => (
-            <PatientCard key={patient.id} patient={patient} index={index} />
+            <PatientCard key={patient.id} patient={patient} index={index} monthStart={monthStart} monthEnd={monthEnd} monthLabel={monthLabel} />
           ))}
         </div>
       )}
