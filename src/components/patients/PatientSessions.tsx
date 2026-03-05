@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { CalendarDays, CheckCircle2, Clock, XCircle, Ban, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn, appointmentToTarget } from '@/lib/utils'
 import { formatDate, formatTime } from '@/lib/formatters'
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_COLORS } from '@/constants'
 import { useSessionNotesByPatient } from '@/hooks/useSessionNotes'
@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { Appointment, AppointmentStatus } from '@/types'
+import type { Appointment, AppointmentStatus, SessionNoteTarget } from '@/types'
 
 interface PatientSessionsProps {
   patientId: string
@@ -29,7 +29,7 @@ interface PatientSessionsProps {
 }
 
 export default function PatientSessions({ patientId, dateRange }: PatientSessionsProps) {
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
+  const [noteTarget, setNoteTarget] = useState<SessionNoteTarget | null>(null)
   const [noteDialogOpen, setNoteDialogOpen] = useState(false)
   const { data: noteIds } = useSessionNotesByPatient(patientId)
 
@@ -196,7 +196,7 @@ export default function PatientSessions({ patientId, dateRange }: PatientSession
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setSelectedAppointment(appointment)
+                          setNoteTarget(appointmentToTarget(appointment))
                           setNoteDialogOpen(true)
                         }}
                         className="gap-1.5"
@@ -218,7 +218,7 @@ export default function PatientSessions({ patientId, dateRange }: PatientSession
       <SessionNoteDialog
         open={noteDialogOpen}
         onOpenChange={setNoteDialogOpen}
-        appointment={selectedAppointment}
+        target={noteTarget}
       />
     </motion.div>
   )

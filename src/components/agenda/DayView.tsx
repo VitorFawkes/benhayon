@@ -19,9 +19,11 @@ interface DayViewProps {
   appointments: Appointment[]
   onSlotClick: (date: string, time: string) => void
   onAppointmentClick: (appointment: Appointment) => void
+  onNoteClick?: (appointment: Appointment) => void
+  noteAppointmentIds?: Set<string>
 }
 
-export function DayView({ date, appointments, onSlotClick, onAppointmentClick }: DayViewProps) {
+export function DayView({ date, appointments, onSlotClick, onAppointmentClick, onNoteClick, noteAppointmentIds }: DayViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(new Date())
 
@@ -137,6 +139,8 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
                   <AppointmentCard
                     appointment={appointment}
                     onClick={() => onAppointmentClick(appointment)}
+                    onNoteClick={onNoteClick}
+                    hasNote={noteAppointmentIds?.has(appointment.id)}
                   />
                 </div>
               )

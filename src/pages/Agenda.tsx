@@ -27,12 +27,14 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAgendaStore } from '@/stores/agendaStore'
 import { useAppointments } from '@/hooks/useAppointments'
+import { useNoteExistsByAppointments } from '@/hooks/useSessionNotes'
 import { DayView } from '@/components/agenda/DayView'
 import { WeekView } from '@/components/agenda/WeekView'
 import { MonthView } from '@/components/agenda/MonthView'
 import { AppointmentForm } from '@/components/agenda/AppointmentForm'
-import { cn } from '@/lib/utils'
-import type { Appointment } from '@/types'
+import SessionNoteDialog from '@/components/patients/SessionNoteDialog'
+import { cn, appointmentToTarget } from '@/lib/utils'
+import type { Appointment, SessionNoteTarget } from '@/types'
 
 // ─── View Mode Config ───
 
@@ -50,6 +52,10 @@ export default function Agenda() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
   const [defaultFormDate, setDefaultFormDate] = useState<string>('')
   const [defaultFormTime, setDefaultFormTime] = useState<string>('')
+
+  // Note dialog state
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false)
+  const [noteTarget, setNoteTarget] = useState<SessionNoteTarget | null>(null)
 
   // Calculate date range for data fetching
   const { startDate, endDate } = useMemo(() => {
@@ -80,6 +86,13 @@ export default function Agenda() {
   }, [selectedDate, viewMode])
 
   const { data: appointments = [], isLoading } = useAppointments(startDate, endDate)
+
+  // Check which visible appointments have notes (lightweight query by IDs)
+  const completedAppointmentIds = useMemo(
+    () => appointments.filter((a) => a.status === 'completed').map((a) => a.id),
+    [appointments]
+  )
+  const { data: noteAppointmentIds = new Set<string>() } = useNoteExistsByAppointments(completedAppointmentIds)
 
   // Navigation
   function goToToday() {
@@ -144,6 +157,11 @@ export default function Agenda() {
     setDefaultFormDate('')
     setDefaultFormTime('')
     setAppointmentFormOpen(true)
+  }, [])
+
+  const handleNoteClick = useCallback((appointment: Appointment) => {
+    setNoteTarget(appointmentToTarget(appointment))
+    setNoteDialogOpen(true)
   }, [])
 
   const handleMonthDayClick = useCallback(
@@ -240,6 +258,8 @@ export default function Agenda() {
                 appointments={appointments}
                 onSlotClick={handleSlotClick}
                 onAppointmentClick={handleAppointmentClick}
+                onNoteClick={handleNoteClick}
+                noteAppointmentIds={noteAppointmentIds}
               />
             )}
             {viewMode === 'week' && (
@@ -248,6 +268,8 @@ export default function Agenda() {
                 appointments={appointments}
                 onSlotClick={handleSlotClick}
                 onAppointmentClick={handleAppointmentClick}
+                onNoteClick={handleNoteClick}
+                noteAppointmentIds={noteAppointmentIds}
               />
             )}
             {viewMode === 'month' && (
@@ -270,6 +292,11 @@ export default function Agenda() {
         defaultTime={defaultFormTime}
       />
 
+      <SessionNoteDialog
+        open={noteDialogOpen}
+        onOpenChange={setNoteDialogOpen}
+        target={noteTarget}
+      />
     </motion.div>
   )
 }

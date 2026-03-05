@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import {
   LayoutDashboard,
   Users,
+  FileText,
   Calendar,
   Receipt,
   MessageCircle,
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/patients', icon: Users, label: 'Pacientes' },
+  { to: '/prontuarios', icon: FileText, label: 'Prontuários' },
   { to: '/agenda', icon: Calendar, label: 'Agenda' },
   { to: '/billing', icon: Receipt, label: 'Cobranças' },
   { to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp' },

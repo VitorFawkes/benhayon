@@ -26,6 +26,8 @@ interface WeekViewProps {
   appointments: Appointment[]
   onSlotClick: (date: string, time: string) => void
   onAppointmentClick: (appointment: Appointment) => void
+  onNoteClick?: (appointment: Appointment) => void
+  noteAppointmentIds?: Set<string>
 }
 
 export function WeekView({
@@ -33,6 +35,8 @@ export function WeekView({
   appointments,
   onSlotClick,
   onAppointmentClick,
+  onNoteClick: _onNoteClick,
+  noteAppointmentIds: _noteAppointmentIds,
 }: WeekViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(new Date())

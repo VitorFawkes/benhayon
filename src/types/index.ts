@@ -253,6 +253,22 @@ export interface SessionNote {
   updated_at: string
 }
 
+// Interface estreita para SessionNoteDialog (desacoplada de Appointment)
+export interface SessionNoteTarget {
+  appointmentId: string
+  patientId: string
+  date: string
+  startTime: string
+  endTime: string
+  status: AppointmentStatus
+}
+
+// Nota enriquecida com joins (para listagens)
+export interface SessionNoteWithDetails extends SessionNote {
+  patient?: Pick<Patient, 'id' | 'full_name' | 'phone'>
+  appointment?: Pick<Appointment, 'id' | 'date' | 'start_time' | 'end_time' | 'status'>
+}
+
 // ─── Utility Types ───
 
 export interface DashboardStats {

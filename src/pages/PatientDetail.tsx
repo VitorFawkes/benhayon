@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Clock,
   Bot,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -34,6 +35,7 @@ import {
 import PatientForm from '@/components/patients/PatientForm'
 import PatientSummary from '@/components/patients/PatientSummary'
 import PatientSessions from '@/components/patients/PatientSessions'
+import PatientProntuario from '@/components/patients/PatientProntuario'
 import PatientPayments from '@/components/patients/PatientPayments'
 import PatientMessages from '@/components/patients/PatientMessages'
 import SendTestMessageDialog from '@/components/patients/SendTestMessageDialog'
@@ -338,6 +340,10 @@ export default function PatientDetail() {
             <CalendarDays className="h-4 w-4" />
             Sessões
           </TabsTrigger>
+          <TabsTrigger value="prontuario" className="gap-1.5">
+            <FileText className="h-4 w-4" />
+            Prontuário
+          </TabsTrigger>
           <TabsTrigger value="payments" className="gap-1.5">
             <CreditCard className="h-4 w-4" />
             Pagamentos
@@ -350,6 +356,10 @@ export default function PatientDetail() {
 
         <TabsContent value="sessions">
           <PatientSessions patientId={patient.id} dateRange={dateRange} />
+        </TabsContent>
+
+        <TabsContent value="prontuario">
+          <PatientProntuario patientId={patient.id} />
         </TabsContent>
 
         <TabsContent value="payments">

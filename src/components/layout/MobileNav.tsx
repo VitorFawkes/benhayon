@@ -3,6 +3,7 @@ import { useSidebarStore } from '@/stores/sidebarStore'
 import {
   LayoutDashboard,
   Users,
+  FileText,
   Calendar,
   Receipt,
   MessageCircle,
@@ -16,6 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/patients', icon: Users, label: 'Pacientes' },
+  { to: '/prontuarios', icon: FileText, label: 'Prontuários' },
   { to: '/agenda', icon: Calendar, label: 'Agenda' },
   { to: '/billing', icon: Receipt, label: 'Cobranças' },
   { to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp' },

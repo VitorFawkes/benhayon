@@ -11,6 +11,7 @@ import ResetPassword from '@/pages/ResetPassword'
 import Dashboard from '@/pages/Dashboard'
 import Patients from '@/pages/Patients'
 import PatientDetail from '@/pages/PatientDetail'
+import Prontuarios from '@/pages/Prontuarios'
 import Agenda from '@/pages/Agenda'
 import Billing from '@/pages/Billing'
 import WhatsApp from '@/pages/WhatsApp'
@@ -78,6 +79,7 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/patients" element={<Patients />} />
               <Route path="/patients/:id" element={<PatientDetail />} />
+              <Route path="/prontuarios" element={<Prontuarios />} />
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/billing" element={<Billing />} />
               <Route path="/whatsapp" element={<WhatsApp />} />
