@@ -14,6 +14,7 @@ import {
   Eye,
   Image,
   Info,
+  FileCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate, formatMonthYear } from '@/lib/formatters'
@@ -51,6 +52,7 @@ import { GenerateInvoices } from '@/components/billing/GenerateInvoices'
 import { InvoiceCard } from '@/components/billing/InvoiceCard'
 import { PaymentForm } from '@/components/billing/PaymentForm'
 import { ReceiptViewer } from '@/components/billing/ReceiptViewer'
+import { NotaFiscalManager } from '@/components/billing/NotaFiscalManager'
 
 // ─── Receipt status config ───
 
@@ -116,7 +118,8 @@ export default function Billing() {
     const paid = invoices.reduce((sum, inv) => sum + inv.amount_paid, 0)
     const pending = total - paid
     const paidCount = invoices.filter((inv) => inv.status === 'paid').length
-    return { total, paid, pending, count: invoices.length, paidCount }
+    const nfCount = invoices.filter((inv) => inv.nota_fiscal_url).length
+    return { total, paid, pending, count: invoices.length, paidCount, nfCount }
   }, [invoices])
 
   // ─── Receipt queries & mutations ───
@@ -147,6 +150,10 @@ export default function Billing() {
           <TabsTrigger value="receipts" className="gap-1.5">
             <Receipt className="h-4 w-4" />
             Comprovantes
+          </TabsTrigger>
+          <TabsTrigger value="notas-fiscais" className="gap-1.5">
+            <FileCheck className="h-4 w-4" />
+            Notas Fiscais
           </TabsTrigger>
         </TabsList>
 
@@ -269,7 +276,7 @@ export default function Billing() {
 
           {/* Summary cards */}
           {!invoicesLoading && invoices.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="rounded-lg border border-border bg-surface p-3">
                 <p className="text-xs text-muted-foreground">Total</p>
                 <p className="text-lg font-semibold text-foreground">
@@ -293,6 +300,20 @@ export default function Billing() {
                 <p className="text-lg font-semibold text-foreground">
                   {monthSummary.paidCount}/{monthSummary.count}{' '}
                   <span className="text-xs font-normal text-muted-foreground">pagas</span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface p-3">
+                <p className="text-xs text-muted-foreground">Notas Fiscais</p>
+                <p className={cn(
+                  'text-lg font-semibold',
+                  monthSummary.nfCount === monthSummary.count && monthSummary.count > 0
+                    ? 'text-success'
+                    : monthSummary.nfCount > 0
+                      ? 'text-warning'
+                      : 'text-muted-foreground'
+                )}>
+                  {monthSummary.nfCount}/{monthSummary.count}{' '}
+                  <span className="text-xs font-normal text-muted-foreground">anexadas</span>
                 </p>
               </div>
             </div>
@@ -557,6 +578,13 @@ export default function Billing() {
               </Table>
             </div>
           )}
+        </TabsContent>
+
+        {/* ════════════════════════════════════
+            TAB 4: NOTAS FISCAIS
+        ════════════════════════════════════ */}
+        <TabsContent value="notas-fiscais" className="space-y-4">
+          <NotaFiscalManager />
         </TabsContent>
       </Tabs>
 

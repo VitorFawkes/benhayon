@@ -213,6 +213,24 @@ serve(async (req) => {
         break
       }
 
+      // ─── SEND MEDIA (image/document) ───
+      case 'send_media': {
+        const { number, mediaUrl, mediaType, caption, fileName } = body
+        const resp = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
+          method: 'POST',
+          headers: evoHeaders,
+          body: JSON.stringify({
+            number,
+            mediatype: mediaType === 'pdf' ? 'document' : mediaType,
+            media: mediaUrl,
+            caption: caption || '',
+            fileName: fileName || 'nota_fiscal',
+          }),
+        })
+        result = await resp.json() as Record<string, unknown>
+        break
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

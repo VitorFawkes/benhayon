@@ -102,6 +102,11 @@ export interface Invoice {
   sent_at: string | null
   paid_at: string | null
   created_at: string
+  // Nota fiscal
+  nota_fiscal_url: string | null
+  nota_fiscal_type: 'image' | 'pdf' | null
+  nota_fiscal_name: string | null
+  nota_fiscal_uploaded_at: string | null
   // Joins
   patient?: Patient
 }

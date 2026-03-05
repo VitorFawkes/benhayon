@@ -218,6 +218,60 @@ serve(async () => {
           external_message_id: `out_${msg.id}`,
         })
 
+        // Auto-send nota fiscal if attached to this invoice
+        if (msg.invoice_id && msg.message_type === 'billing') {
+          const { data: invoiceData } = await supabase
+            .from('invoices')
+            .select('nota_fiscal_url, nota_fiscal_type, nota_fiscal_name')
+            .eq('id', msg.invoice_id)
+            .single()
+
+          if (invoiceData?.nota_fiscal_url) {
+            try {
+              const mediaType = invoiceData.nota_fiscal_type === 'pdf' ? 'document' : 'image'
+              const mediaResponse = await fetch(
+                `${EVOLUTION_API_URL}/message/sendMedia/${instance.instance_name}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    number: phone,
+                    mediatype: mediaType,
+                    media: invoiceData.nota_fiscal_url,
+                    caption: 'Nota Fiscal',
+                    fileName: invoiceData.nota_fiscal_name || 'nota_fiscal',
+                  }),
+                }
+              )
+
+              if (!mediaResponse.ok) {
+                const mediaError = await mediaResponse.text()
+                console.error(`[send-messages] Failed to send nota fiscal for msg ${msg.id}:`, mediaError)
+              } else {
+                console.log(`[send-messages] Nota fiscal sent for invoice ${msg.invoice_id}`)
+                await supabase.from('message_logs').insert({
+                  profile_id: msg.profile_id,
+                  patient_id: msg.patient_id,
+                  direction: 'outbound',
+                  message_type: 'document',
+                  content: 'Nota Fiscal',
+                  media_url: invoiceData.nota_fiscal_url,
+                  external_message_id: `out_nf_${msg.id}`,
+                })
+              }
+
+              // Extra delay between text and media to avoid rate limiting
+              await new Promise((resolve) => setTimeout(resolve, 2000))
+            } catch (nfError) {
+              console.error(`[send-messages] Nota fiscal send error:`, nfError)
+              // Non-fatal: text was already sent successfully
+            }
+          }
+        }
+
         sent++
 
         // Rate limit: wait between messages

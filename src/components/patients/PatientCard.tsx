@@ -20,6 +20,8 @@ import {
   Send,
   CreditCard,
   Copy,
+  FileCheck,
+  FileX,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -99,7 +101,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
         // Fatura do mês selecionado (filtrada por reference_month)
         supabase
           .from('invoices')
-          .select('total_amount, amount_paid, status, sent_at')
+          .select('total_amount, amount_paid, status, sent_at, nota_fiscal_url')
           .eq('patient_id', patient.id)
           .eq('reference_month', referenceMonthStr)
           .maybeSingle(),
@@ -142,6 +144,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
         pendingStatus,
         pendingAmount,
         invoiceSentAt: invoice?.sent_at as string | null ?? null,
+        hasNotaFiscal: !!(invoice as Record<string, unknown>)?.nota_fiscal_url,
         unreadMessages: unread.count || 0,
         pendingReceipts: receipts.count || 0,
       }
@@ -248,12 +251,20 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
                       : formatCurrency(stats.pendingAmount)}
                 </p>
                 {stats.pendingStatus !== 'no_invoice' && (
-                  <p className={cn(
-                    'text-[9px] mt-0.5',
-                    stats.invoiceSentAt ? 'text-success' : 'text-destructive'
-                  )}>
-                    {stats.invoiceSentAt ? 'Enviada' : 'Nao enviada'}
-                  </p>
+                  <>
+                    <p className={cn(
+                      'text-[9px] mt-0.5',
+                      stats.invoiceSentAt ? 'text-success' : 'text-destructive'
+                    )}>
+                      {stats.invoiceSentAt ? 'Enviada' : 'Nao enviada'}
+                    </p>
+                    <p className={cn(
+                      'text-[9px]',
+                      stats.hasNotaFiscal ? 'text-success' : 'text-muted-foreground/60'
+                    )}>
+                      {stats.hasNotaFiscal ? 'NF anexada' : 'Sem NF'}
+                    </p>
+                  </>
                 )}
               </div>
 

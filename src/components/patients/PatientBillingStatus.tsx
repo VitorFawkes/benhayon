@@ -9,6 +9,8 @@ import {
   Bell,
   RefreshCw,
   FileText,
+  FileCheck,
+  FileX,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate, formatMonthYear, formatCurrency } from '@/lib/formatters'
@@ -87,7 +89,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {/* Mes de referencia */}
         <div className="flex items-start gap-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
@@ -149,6 +151,26 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
             </p>
           </div>
         </div>
+
+        {/* Nota Fiscal */}
+        <div className="flex items-start gap-2">
+          <div className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+            invoice.nota_fiscal_url ? 'bg-success/10' : 'bg-muted'
+          )}>
+            {invoice.nota_fiscal_url ? (
+              <FileCheck className="h-3.5 w-3.5 text-success" />
+            ) : (
+              <FileX className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Nota fiscal</p>
+            <p className={cn('text-xs font-medium', invoice.nota_fiscal_url ? 'text-success' : 'text-muted-foreground')}>
+              {invoice.nota_fiscal_url ? 'Anexada' : 'Pendente'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Botao de reenvio */}
@@ -182,6 +204,15 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
                 {formatMonthYear(invoice.reference_month)}
               </span>
               {' '}sera reenviada via WhatsApp.
+              {invoice.nota_fiscal_url ? (
+                <span className="block mt-2 text-success text-xs">
+                  A nota fiscal ({invoice.nota_fiscal_name}) sera enviada junto.
+                </span>
+              ) : (
+                <span className="block mt-2 text-warning text-xs">
+                  Nenhuma nota fiscal anexada. Somente o texto sera enviado.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
