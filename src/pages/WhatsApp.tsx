@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -18,6 +19,11 @@ import {
   BotOff,
   ChevronDown,
   ChevronUp,
+  User,
+  Pencil,
+  Zap,
+  Check,
+  X,
 } from 'lucide-react'
 import {
   useWhatsAppInstance,
@@ -27,7 +33,7 @@ import {
   useDisconnectWhatsApp,
 } from '@/hooks/useWhatsApp'
 import { useMessageLogs } from '@/hooks/useMessageLogs'
-import { useMessageQueue, useCancelMessage, useTogglePatientAI } from '@/hooks/useMessageQueue'
+import { useMessageQueue, useCancelMessage, useTogglePatientAI, useRetryMessage, useEditMessageContent, useSendNow } from '@/hooks/useMessageQueue'
 import MessageItem from '@/components/messages/MessageItem'
 import MediaViewer from '@/components/messages/MediaViewer'
 import { formatPhone } from '@/lib/formatters'
@@ -45,8 +51,12 @@ export default function WhatsApp() {
     status: ['queued', 'sending', 'failed'],
     limit: 30,
   })
+  const navigate = useNavigate()
   const cancelMessage = useCancelMessage()
   const togglePatientAI = useTogglePatientAI()
+  const retryMessage = useRetryMessage()
+  const editMessageContent = useEditMessageContent()
+  const sendNow = useSendNow()
 
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [isPolling, setIsPolling] = useState(false)
@@ -301,6 +311,25 @@ export default function WhatsApp() {
             }
           )
         }}
+        onRetry={(id) => {
+          retryMessage.mutate(id, {
+            onSuccess: () => toast.success('Mensagem reenfileirada'),
+            onError: () => toast.error('Erro ao reenviar'),
+          })
+        }}
+        onEdit={(id, content) => {
+          editMessageContent.mutate({ messageId: id, content }, {
+            onSuccess: () => toast.success('Mensagem atualizada'),
+            onError: () => toast.error('Erro ao editar'),
+          })
+        }}
+        onSendNow={(id) => {
+          sendNow.mutate(id, {
+            onSuccess: () => toast.success('Envio antecipado'),
+            onError: () => toast.error('Erro ao antecipar envio'),
+          })
+        }}
+        onNavigatePatient={(patientId) => navigate(`/patients/${patientId}`)}
       />
 
       {/* Message Log */}
@@ -365,13 +394,23 @@ function MessageQueueSection({
   loading,
   onCancel,
   onDisableAI,
+  onRetry,
+  onEdit,
+  onSendNow,
+  onNavigatePatient,
 }: {
   messages: MessageQueueItem[]
   loading: boolean
   onCancel: (id: string) => void
   onDisableAI: (patientId: string, patientName: string) => void
+  onRetry: (id: string) => void
+  onEdit: (id: string, content: string) => void
+  onSendNow: (id: string) => void
+  onNavigatePatient: (patientId: string) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
 
   return (
     <div className="bg-surface border border-border rounded-xl">
@@ -491,8 +530,76 @@ function MessageQueueSection({
                             )}
                           </div>
 
+                          {/* Inline edit */}
+                          {editingId === msg.id && (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                className="w-full rounded-lg border border-border bg-background p-3 text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                rows={4}
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    onEdit(msg.id, editContent)
+                                    setEditingId(null)
+                                  }}
+                                  className="h-8 px-3 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5"
+                                >
+                                  <Check size={14} />
+                                  Salvar
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
+                                >
+                                  <X size={14} />
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Actions */}
-                          <div className="flex gap-2 pt-1">
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <button
+                              onClick={() => onNavigatePatient(msg.patient_id)}
+                              className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
+                            >
+                              <User size={14} />
+                              Ver paciente
+                            </button>
+                            {msg.status === 'queued' && editingId !== msg.id && (
+                              <button
+                                onClick={() => {
+                                  setEditingId(msg.id)
+                                  setEditContent(msg.message_content)
+                                }}
+                                className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
+                              >
+                                <Pencil size={14} />
+                                Editar mensagem
+                              </button>
+                            )}
+                            {msg.status === 'queued' && new Date(msg.scheduled_for) > new Date() && (
+                              <button
+                                onClick={() => onSendNow(msg.id)}
+                                className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-1.5"
+                              >
+                                <Zap size={14} />
+                                Enviar agora
+                              </button>
+                            )}
+                            {msg.status === 'failed' && (
+                              <button
+                                onClick={() => onRetry(msg.id)}
+                                className="h-8 px-3 text-xs font-medium rounded-lg border border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-1.5"
+                              >
+                                <RefreshCw size={14} />
+                                Reenviar
+                              </button>
+                            )}
                             {canCancel && (
                               <button
                                 onClick={() => onCancel(msg.id)}

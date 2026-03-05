@@ -56,6 +56,74 @@ export function useCancelMessage() {
   })
 }
 
+export function useRetryMessage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase
+        .from('message_queue')
+        .update({
+          status: 'queued' as QueueStatus,
+          attempts: 0,
+          last_error: null,
+          scheduled_for: new Date().toISOString(),
+        })
+        .eq('id', messageId)
+        .eq('status', 'failed')
+        .select('id')
+
+      if (error) throw error
+      if (!data?.length) throw new Error('Mensagem já foi processada')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['message-queue'] })
+    },
+  })
+}
+
+export function useEditMessageContent() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      const { data, error } = await supabase
+        .from('message_queue')
+        .update({ message_content: content })
+        .eq('id', messageId)
+        .eq('status', 'queued')
+        .select('id')
+
+      if (error) throw error
+      if (!data?.length) throw new Error('Mensagem já está sendo enviada')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['message-queue'] })
+    },
+  })
+}
+
+export function useSendNow() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase
+        .from('message_queue')
+        .update({ scheduled_for: new Date().toISOString() })
+        .eq('id', messageId)
+        .eq('status', 'queued')
+        .select('id')
+
+      if (error) throw error
+      if (!data?.length) throw new Error('Mensagem já está sendo enviada')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['message-queue'] })
+    },
+  })
+}
+
 export function useTogglePatientAI() {
   const queryClient = useQueryClient()
 
