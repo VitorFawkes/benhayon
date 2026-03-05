@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import type { Invoice, InvoiceStatus, AppointmentStatus } from '@/types'
+import type { Invoice, InvoiceStatus, AppointmentStatus, OutboundMessageType, QueueStatus } from '@/types'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 
 // ─── Filter Types ───
@@ -242,6 +242,97 @@ export function useUpdateInvoice() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invoiceKeys.all })
       queryClient.setQueryData(invoiceKeys.detail(data.id), data)
+    },
+  })
+}
+
+// ─── Patient Billing Status ───
+
+export interface PatientBillingStatusData {
+  invoice: Invoice | null
+  billingMessagesSent: number
+  reminderMessagesSent: number
+  lastBillingContent: string | null
+}
+
+export function usePatientBillingStatus(patientId: string | undefined) {
+  return useQuery({
+    queryKey: ['patient-billing-status', patientId],
+    queryFn: async (): Promise<PatientBillingStatusData> => {
+      // Última fatura do paciente
+      const { data: invoice, error: invError } = await supabase
+        .from('invoices')
+        .select('*, patient:patients(*)')
+        .eq('patient_id', patientId!)
+        .order('reference_month', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (invError) throw invError
+
+      if (!invoice) {
+        return { invoice: null, billingMessagesSent: 0, reminderMessagesSent: 0, lastBillingContent: null }
+      }
+
+      // Mensagens enviadas para essa fatura
+      const { data: messages, error: msgError } = await supabase
+        .from('message_queue')
+        .select('message_type, message_content, status')
+        .eq('invoice_id', invoice.id)
+        .eq('status', 'sent' as QueueStatus)
+
+      if (msgError) throw msgError
+
+      const billingMessages = (messages ?? []).filter(m => m.message_type === 'billing')
+      const reminderMessages = (messages ?? []).filter(m => m.message_type === 'reminder')
+
+      return {
+        invoice: invoice as Invoice,
+        billingMessagesSent: billingMessages.length,
+        reminderMessagesSent: reminderMessages.length,
+        lastBillingContent: billingMessages.length > 0 ? billingMessages[billingMessages.length - 1].message_content : null,
+      }
+    },
+    enabled: !!patientId,
+  })
+}
+
+export function useResendBilling() {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async ({
+      invoiceId,
+      patientId,
+      messageContent,
+    }: {
+      invoiceId: string
+      patientId: string
+      messageContent: string
+    }) => {
+      if (!user) throw new Error('Usuário não autenticado')
+
+      const { error } = await supabase
+        .from('message_queue')
+        .insert({
+          profile_id: user.id,
+          patient_id: patientId,
+          invoice_id: invoiceId,
+          message_type: 'billing' as OutboundMessageType,
+          message_content: messageContent,
+          scheduled_for: new Date().toISOString(),
+          status: 'queued' as QueueStatus,
+          attempts: 0,
+          max_attempts: 3,
+          escalation_level: 0,
+        })
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-billing-status'] })
+      queryClient.invalidateQueries({ queryKey: ['message-queue'] })
     },
   })
 }

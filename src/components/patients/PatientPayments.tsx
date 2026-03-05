@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import PatientBillingStatus from '@/components/patients/PatientBillingStatus'
 import type { Payment, Invoice } from '@/types'
 
 interface PatientPaymentsProps {
@@ -101,6 +102,9 @@ export default function PatientPayments({ patientId }: PatientPaymentsProps) {
       transition={{ duration: 0.3 }}
       className="space-y-4"
     >
+      {/* Billing Status */}
+      <PatientBillingStatus patientId={patientId} />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {summaryCards.map((card) => {

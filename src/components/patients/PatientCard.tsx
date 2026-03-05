@@ -99,7 +99,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
         // Fatura do mês selecionado (filtrada por reference_month)
         supabase
           .from('invoices')
-          .select('total_amount, amount_paid, status')
+          .select('total_amount, amount_paid, status, sent_at')
           .eq('patient_id', patient.id)
           .eq('reference_month', referenceMonthStr)
           .maybeSingle(),
@@ -141,6 +141,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
         noShows: noShows.count || 0,
         pendingStatus,
         pendingAmount,
+        invoiceSentAt: invoice?.sent_at as string | null ?? null,
         unreadMessages: unread.count || 0,
         pendingReceipts: receipts.count || 0,
       }
@@ -246,6 +247,14 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
                       ? 'Pago'
                       : formatCurrency(stats.pendingAmount)}
                 </p>
+                {stats.pendingStatus !== 'no_invoice' && (
+                  <p className={cn(
+                    'text-[9px] mt-0.5',
+                    stats.invoiceSentAt ? 'text-success' : 'text-destructive'
+                  )}>
+                    {stats.invoiceSentAt ? 'Enviada' : 'Nao enviada'}
+                  </p>
+                )}
               </div>
 
               {/* Alertas — tempo real, não depende do mês */}
