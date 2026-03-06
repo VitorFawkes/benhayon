@@ -209,7 +209,15 @@ serve(async (req) => {
           headers: evoHeaders,
           body: JSON.stringify({ number, text }),
         })
-        result = await resp.json() as Record<string, unknown>
+        const sendData = await resp.json()
+        if (!resp.ok) {
+          const errMsg = sendData?.message || sendData?.error || `Evolution API error: ${resp.status}`
+          console.error('[evolution-api] send_text failed:', errMsg)
+          return new Response(JSON.stringify({ error: errMsg }), {
+            status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+        result = sendData as Record<string, unknown>
         break
       }
 
@@ -227,7 +235,15 @@ serve(async (req) => {
             fileName: fileName || 'nota_fiscal',
           }),
         })
-        result = await resp.json() as Record<string, unknown>
+        const mediaData = await resp.json()
+        if (!resp.ok) {
+          const errMsg = mediaData?.message || mediaData?.error || `Evolution API error: ${resp.status}`
+          console.error('[evolution-api] send_media failed:', errMsg)
+          return new Response(JSON.stringify({ error: errMsg }), {
+            status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          })
+        }
+        result = mediaData as Record<string, unknown>
         break
       }
 

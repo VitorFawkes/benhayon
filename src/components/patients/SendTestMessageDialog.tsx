@@ -362,7 +362,7 @@ export default function SendTestMessageDialog({
 
       const phone = patientPhone.replace('+', '')
 
-      const { error } = await supabase.functions.invoke('evolution-api', {
+      const { data: sendResult, error } = await supabase.functions.invoke('evolution-api', {
         body: {
           action: 'send_text',
           instanceName: instance.instance_name,
@@ -371,7 +371,18 @@ export default function SendTestMessageDialog({
         },
       })
 
-      if (error) throw error
+      if (error) {
+        // Try to extract a useful message from the edge function response
+        const detail = typeof error === 'object' && 'message' in error
+          ? error.message
+          : String(error)
+        throw new Error(detail)
+      }
+
+      // Evolution API may return an error in the response body
+      if (sendResult?.error) {
+        throw new Error(sendResult.error)
+      }
 
       toast.success(`Mensagem de teste enviada para ${patientName}`)
       onOpenChange(false)
