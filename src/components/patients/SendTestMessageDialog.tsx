@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { MessageSquare, Send, Loader2, Info } from 'lucide-react'
+import { MessageSquare, Send, Loader2, Info, Eye, Code2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAISettings } from '@/hooks/useAISettings'
+import { TEMPLATE_VARIABLES } from '@/constants'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -49,6 +51,55 @@ function renderTemplate(template: string, variables: Record<string, string>): st
   return result
 }
 
+// ─── Template with clickable placeholder chips ───
+
+function TemplateWithChips({
+  template,
+  variables,
+  selectedVar,
+  onSelectVar,
+}: {
+  template: string
+  variables: Record<string, string>
+  selectedVar: string | null
+  onSelectVar: (key: string | null) => void
+}) {
+  const parts = template.split(/(\{[^}]+\})/)
+
+  return (
+    <div className="text-sm leading-relaxed">
+      {parts.map((part, i) => {
+        const match = part.match(/^\{(.+)\}$/)
+        if (match) {
+          const key = match[1]
+          const isSelected = selectedVar === key
+          const hasValue = key in variables
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelectVar(isSelected ? null : key)}
+              className={cn(
+                'inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-xs font-medium transition-all cursor-pointer',
+                isSelected
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : hasValue
+                    ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                    : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {`{${key}}`}
+            </button>
+          )
+        }
+        return <span key={i} className="whitespace-pre-wrap">{part}</span>
+      })}
+    </div>
+  )
+}
+
+// ─── Component ───
+
 export default function SendTestMessageDialog({
   open,
   onOpenChange,
@@ -65,6 +116,34 @@ export default function SendTestMessageDialog({
   const [useRealData, setUseRealData] = useState(false)
   const [realDataLoading, setRealDataLoading] = useState(false)
   const [noDataMessage, setNoDataMessage] = useState<string | null>(null)
+  const [realVariables, setRealVariables] = useState<Record<string, string>>({})
+  const [selectedVar, setSelectedVar] = useState<string | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Get the current template
+  const currentTemplate = useMemo(() => {
+    if (!aiSettings) return ''
+    if (messageType === 'billing') return aiSettings.billing_template || ''
+    if (messageType === 'reminder') return aiSettings.reminder_1_template || ''
+    if (messageType === 'appointment_reminder') return aiSettings.appointment_reminder_template || ''
+    return ''
+  }, [aiSettings, messageType])
+
+  // Get variable labels from TEMPLATE_VARIABLES constant
+  const variableLabels = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const v of TEMPLATE_VARIABLES) {
+      const key = v.key.replace(/[{}]/g, '')
+      map[key] = v.label
+    }
+    return map
+  }, [])
+
+  // Reset selectedVar when type changes
+  useEffect(() => {
+    setSelectedVar(null)
+    setShowPreview(false)
+  }, [messageType, useRealData])
 
   // Generate preview when type, settings, or data mode change
   useEffect(() => {
@@ -113,6 +192,7 @@ export default function SendTestMessageDialog({
         if (!appointments || appointments.length === 0) {
           setNoDataMessage('Este paciente não teve sessões no mês anterior.')
           setMessageText('')
+          setRealVariables({})
           return
         }
 
@@ -125,7 +205,6 @@ export default function SendTestMessageDialog({
         const reminderDay = aiSettings.reminder_day ?? 10
         const billingDay = aiSettings.billing_day ?? 5
         const now = new Date()
-        // Match edge function logic: if reminderDay <= billingDay, due date is next month
         const dueDate = reminderDay <= billingDay
           ? new Date(now.getFullYear(), now.getMonth() + 1, reminderDay)
           : new Date(now.getFullYear(), now.getMonth(), reminderDay)
@@ -140,6 +219,7 @@ export default function SendTestMessageDialog({
           datas_sessoes: formattedDates,
         }
 
+        setRealVariables(variables)
         const template = aiSettings.billing_template || ''
         setMessageText(renderTemplate(template, variables))
 
@@ -157,6 +237,7 @@ export default function SendTestMessageDialog({
         if (!unpaidInvoices || unpaidInvoices.length === 0) {
           setNoDataMessage('Este paciente não tem faturas pendentes.')
           setMessageText('')
+          setRealVariables({})
           return
         }
 
@@ -171,6 +252,7 @@ export default function SendTestMessageDialog({
           vencimento: new Date(invoice.due_date + 'T00:00:00').toLocaleDateString('pt-BR'),
         }
 
+        setRealVariables(variables)
         const template = aiSettings.reminder_1_template || ''
         setMessageText(renderTemplate(template, variables))
 
@@ -192,6 +274,7 @@ export default function SendTestMessageDialog({
         if (!nextAppointments || nextAppointments.length === 0) {
           setNoDataMessage('Este paciente não tem sessões agendadas.')
           setMessageText('')
+          setRealVariables({})
           return
         }
 
@@ -202,6 +285,7 @@ export default function SendTestMessageDialog({
           horario: apt.start_time?.slice(0, 5) || '',
         }
 
+        setRealVariables(variables)
         const template = aiSettings.appointment_reminder_template || ''
         setMessageText(renderTemplate(template, variables))
       }
@@ -215,7 +299,6 @@ export default function SendTestMessageDialog({
       const monthStart = format(startOfMonth(prevMonth), 'yyyy-MM-dd')
       const monthEnd = format(endOfMonth(prevMonth), 'yyyy-MM-dd')
 
-      // Fetch session count for simulated mode
       supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
@@ -265,7 +348,6 @@ export default function SendTestMessageDialog({
 
     setIsSending(true)
     try {
-      // Get WhatsApp instance
       const { data: instance } = await supabase
         .from('whatsapp_instances')
         .select('instance_name, status')
@@ -302,9 +384,11 @@ export default function SendTestMessageDialog({
     }
   }
 
+  const hasRealVariables = useRealData && Object.keys(realVariables).length > 0
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" />
@@ -354,10 +438,8 @@ export default function SendTestMessageDialog({
             />
           </div>
 
+          {/* Content area */}
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              Preview da mensagem
-            </label>
             {realDataLoading ? (
               <div className="flex items-center justify-center py-8 rounded-lg border border-input bg-surface">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -367,8 +449,99 @@ export default function SendTestMessageDialog({
                 <Info className="h-4 w-4 shrink-0" />
                 {noDataMessage}
               </div>
+            ) : hasRealVariables && !showPreview ? (
+              /* ─── Template + Variables view ─── */
+              <div className="space-y-3">
+                {/* Template with chips */}
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5 block">
+                    <Code2 className="h-3.5 w-3.5" />
+                    Template
+                  </label>
+                  <div className="rounded-lg border border-input bg-surface p-3">
+                    <TemplateWithChips
+                      template={currentTemplate}
+                      variables={realVariables}
+                      selectedVar={selectedVar}
+                      onSelectVar={setSelectedVar}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Clique nos placeholders para ver os valores reais
+                  </p>
+                </div>
+
+                {/* Variable values panel */}
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                    Valores dos placeholders
+                  </label>
+                  <div className="rounded-lg border border-input bg-surface divide-y divide-border">
+                    {Object.entries(realVariables).map(([key, value]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedVar(selectedVar === key ? null : key)}
+                        className={cn(
+                          'w-full flex items-start justify-between gap-3 px-3 py-2 text-left transition-colors',
+                          selectedVar === key
+                            ? 'bg-primary/5'
+                            : 'hover:bg-muted/50'
+                        )}
+                      >
+                        <div className="shrink-0">
+                          <span className={cn(
+                            'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium',
+                            selectedVar === key
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-primary/10 text-primary'
+                          )}>
+                            {`{${key}}`}
+                          </span>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {variableLabels[key] || key}
+                          </p>
+                        </div>
+                        <span className="text-sm text-foreground text-right">
+                          {value || <span className="text-muted-foreground italic">vazio</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Toggle to preview */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setShowPreview(true)}
+                >
+                  <Eye className="h-4 w-4" />
+                  Ver mensagem final
+                </Button>
+              </div>
             ) : (
-              <>
+              /* ─── Preview / Edit view ─── */
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    {hasRealVariables ? 'Mensagem final' : 'Preview da mensagem'}
+                  </label>
+                  {hasRealVariables && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary"
+                      onClick={() => setShowPreview(false)}
+                    >
+                      <Code2 className="h-3.5 w-3.5" />
+                      Ver template
+                    </Button>
+                  )}
+                </div>
                 <textarea
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
@@ -378,7 +551,7 @@ export default function SendTestMessageDialog({
                 <p className="text-xs text-muted-foreground mt-1">
                   Você pode editar a mensagem antes de enviar.
                 </p>
-              </>
+              </div>
             )}
           </div>
         </div>
