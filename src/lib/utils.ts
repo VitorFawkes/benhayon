@@ -19,13 +19,13 @@ export function extractErrorMessage(error: unknown, fallback = 'Erro desconhecid
 /** Throw a descriptive error from supabase.functions.invoke result */
 export async function throwIfFunctionsError(error: unknown): Promise<void> {
   if (!error) return
-  // FunctionsHttpError carries response body in context
+  // FunctionsHttpError has context = Response object (from fetch)
   let detail = ''
   try {
     if (typeof error === 'object' && error !== null && 'context' in error) {
-      const ctx = (error as any).context
-      if (ctx?.body) {
-        const body = await new Response(ctx.body).json()
+      const response = (error as any).context as Response
+      if (response && typeof response.json === 'function') {
+        const body = await response.json()
         detail = body?.detail || body?.error || ''
       }
     }

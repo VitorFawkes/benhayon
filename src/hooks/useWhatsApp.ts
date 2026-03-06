@@ -5,6 +5,27 @@ import { extractErrorMessage, throwIfFunctionsError } from '@/lib/utils'
 import type { WhatsAppInstance } from '@/types'
 import { toast } from 'sonner'
 
+// ─── Helper: invoke edge function with explicit auth token ───
+
+async function invokeWithAuth(action: string, body: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) {
+    throw new Error('Sessão expirada. Faça login novamente.')
+  }
+
+  const { data, error } = await supabase.functions.invoke('evolution-api', {
+    body: { action, ...body },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  await throwIfFunctionsError(error)
+  if (data?.error) throw new Error(data.error)
+
+  return data
+}
+
 // ─── Query: buscar instância do banco ───
 
 export function useWhatsAppInstance() {
@@ -27,7 +48,6 @@ export function useWhatsAppInstance() {
 }
 
 // ─── Mutation: criar instância + gerar QR code ───
-// A Edge Function cria na Evolution API, salva no banco, e configura webhook
 
 interface ConnectResult {
   status: string
@@ -44,17 +64,9 @@ export function useConnectWhatsApp() {
   return useMutation({
     mutationFn: async (): Promise<ConnectResult> => {
       const instanceName = `benhayon_${user!.id.slice(0, 8)}`
+      const data = await invokeWithAuth('create_and_connect', { instanceName })
 
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'create_and_connect', instanceName },
-      })
-
-      await throwIfFunctionsError(error)
-      if (data?.error) throw new Error(data.error)
-
-      // Refetch instance from DB (Edge Function saved/updated it)
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
-
       return data as ConnectResult
     },
     onError: (error) => {
@@ -75,15 +87,9 @@ export function useCheckConnectionState() {
 
   return useMutation({
     mutationFn: async (instanceName: string): Promise<StateResult> => {
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'connection_state', instanceName },
-      })
+      const data = await invokeWithAuth('connection_state', { instanceName })
 
-      await throwIfFunctionsError(error)
-
-      // Edge Function updates DB, refetch
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
-
       return data as StateResult
     },
   })
@@ -94,11 +100,7 @@ export function useCheckConnectionState() {
 export function useRefreshQRCode() {
   return useMutation({
     mutationFn: async (instanceName: string): Promise<{ qrcode?: string | null }> => {
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'connect', instanceName },
-      })
-
-      await throwIfFunctionsError(error)
+      const data = await invokeWithAuth('connect', { instanceName })
       return data as { qrcode?: string | null }
     },
     onError: (error) => {
@@ -114,11 +116,7 @@ export function useDisconnectWhatsApp() {
 
   return useMutation({
     mutationFn: async (instanceName: string) => {
-      const { data, error } = await supabase.functions.invoke('evolution-api', {
-        body: { action: 'disconnect', instanceName },
-      })
-
-      await throwIfFunctionsError(error)
+      const data = await invokeWithAuth('disconnect', { instanceName })
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data
