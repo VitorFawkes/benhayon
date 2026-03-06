@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { extractErrorMessage } from '@/lib/utils'
+import { extractErrorMessage, throwIfFunctionsError } from '@/lib/utils'
 import type { WhatsAppInstance } from '@/types'
 import { toast } from 'sonner'
 
@@ -49,7 +49,7 @@ export function useConnectWhatsApp() {
         body: { action: 'create_and_connect', instanceName },
       })
 
-      if (error) throw new Error(extractErrorMessage(error))
+      await throwIfFunctionsError(error)
       if (data?.error) throw new Error(data.error)
 
       // Refetch instance from DB (Edge Function saved/updated it)
@@ -79,7 +79,7 @@ export function useCheckConnectionState() {
         body: { action: 'connection_state', instanceName },
       })
 
-      if (error) throw new Error(extractErrorMessage(error))
+      await throwIfFunctionsError(error)
 
       // Edge Function updates DB, refetch
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
@@ -98,7 +98,7 @@ export function useRefreshQRCode() {
         body: { action: 'connect', instanceName },
       })
 
-      if (error) throw new Error(extractErrorMessage(error))
+      await throwIfFunctionsError(error)
       return data as { qrcode?: string | null }
     },
     onError: (error) => {
@@ -118,7 +118,7 @@ export function useDisconnectWhatsApp() {
         body: { action: 'disconnect', instanceName },
       })
 
-      if (error) throw new Error(extractErrorMessage(error))
+      await throwIfFunctionsError(error)
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data

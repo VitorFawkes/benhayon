@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { MessageSquare, Send, Loader2, Info, Eye, Code2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, throwIfFunctionsError } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAISettings } from '@/hooks/useAISettings'
@@ -371,13 +371,7 @@ export default function SendTestMessageDialog({
         },
       })
 
-      if (error) {
-        // Try to extract a useful message from the edge function response
-        const detail = typeof error === 'object' && 'message' in error
-          ? error.message
-          : String(error)
-        throw new Error(detail)
-      }
+      await throwIfFunctionsError(error)
 
       // Evolution API may return an error in the response body
       if (sendResult?.error) {
