@@ -28,8 +28,10 @@ export default function Settings() {
 
       if (error) throw error
       toast.success('Perfil atualizado!')
-    } catch {
-      toast.error('Erro ao salvar perfil')
+    } catch (error) {
+      toast.error('Erro ao salvar perfil', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     } finally {
       setSaving(false)
     }
@@ -51,8 +53,10 @@ export default function Settings() {
       toast.success('Senha alterada com sucesso!')
       setNewPassword('')
       setConfirmPassword('')
-    } catch {
-      toast.error('Erro ao alterar senha')
+    } catch (error) {
+      toast.error('Erro ao alterar senha', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     } finally {
       setSavingPassword(false)
     }

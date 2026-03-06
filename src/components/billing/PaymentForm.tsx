@@ -124,7 +124,9 @@ export function PaymentForm({
       toast.success('Pagamento registrado com sucesso!')
       handleClose()
     } catch (error) {
-      toast.error('Erro ao registrar pagamento. Tente novamente.')
+      toast.error('Erro ao registrar pagamento', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     }
   }
 

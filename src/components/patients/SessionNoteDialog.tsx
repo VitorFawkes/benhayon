@@ -246,8 +246,10 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
 
       mediaRecorder.start()
       setIsRecording(true)
-    } catch {
-      toast.error('Não foi possível acessar o microfone')
+    } catch (error) {
+      toast.error('Não foi possível acessar o microfone', {
+        description: error instanceof Error ? error.message : 'Verifique as permissões do navegador',
+      })
     }
   }
 
@@ -295,8 +297,10 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
 
       toast.success('Áudio salvo com sucesso')
       await transcribeAudio(path, signedUrl)
-    } catch {
-      toast.error('Erro ao fazer upload do áudio')
+    } catch (error) {
+      toast.error('Erro ao fazer upload do áudio', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     } finally {
       setIsUploading(false)
     }
@@ -311,7 +315,7 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
         body: { audio_url: signedUrl },
       })
 
-      if (error) throw error
+      if (error) throw new Error(error instanceof Error ? error.message : String(error))
 
       const text = data?.transcription ?? ''
       setTranscription(text)
@@ -326,8 +330,10 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
       })
 
       toast.success('Áudio transcrito com sucesso')
-    } catch {
-      toast.error('Erro ao transcrever áudio (a edge function pode não estar configurada)')
+    } catch (error) {
+      toast.error('Erro ao transcrever áudio', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     } finally {
       setIsTranscribing(false)
     }

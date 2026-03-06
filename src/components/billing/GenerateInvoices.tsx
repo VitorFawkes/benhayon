@@ -77,7 +77,9 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
       )
       handleClose()
     } catch (error) {
-      toast.error('Erro ao gerar cobranças. Tente novamente.')
+      toast.error('Erro ao gerar cobranças', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     }
   }
 

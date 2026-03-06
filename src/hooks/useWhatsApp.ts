@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { extractErrorMessage } from '@/lib/utils'
 import type { WhatsAppInstance } from '@/types'
 import { toast } from 'sonner'
 
@@ -48,7 +49,8 @@ export function useConnectWhatsApp() {
         body: { action: 'create_and_connect', instanceName },
       })
 
-      if (error) throw error
+      if (error) throw new Error(extractErrorMessage(error))
+      if (data?.error) throw new Error(data.error)
 
       // Refetch instance from DB (Edge Function saved/updated it)
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
@@ -56,7 +58,7 @@ export function useConnectWhatsApp() {
       return data as ConnectResult
     },
     onError: (error) => {
-      toast.error('Erro ao conectar WhatsApp', { description: error.message })
+      toast.error('Erro ao conectar WhatsApp', { description: extractErrorMessage(error) })
     },
   })
 }
@@ -77,7 +79,7 @@ export function useCheckConnectionState() {
         body: { action: 'connection_state', instanceName },
       })
 
-      if (error) throw error
+      if (error) throw new Error(extractErrorMessage(error))
 
       // Edge Function updates DB, refetch
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
@@ -96,11 +98,11 @@ export function useRefreshQRCode() {
         body: { action: 'connect', instanceName },
       })
 
-      if (error) throw error
+      if (error) throw new Error(extractErrorMessage(error))
       return data as { qrcode?: string | null }
     },
-    onError: () => {
-      toast.error('Erro ao gerar novo QR Code')
+    onError: (error) => {
+      toast.error('Erro ao gerar novo QR Code', { description: extractErrorMessage(error) })
     },
   })
 }
@@ -116,7 +118,7 @@ export function useDisconnectWhatsApp() {
         body: { action: 'disconnect', instanceName },
       })
 
-      if (error) throw error
+      if (error) throw new Error(extractErrorMessage(error))
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data
@@ -125,7 +127,7 @@ export function useDisconnectWhatsApp() {
       toast.success('WhatsApp desconectado')
     },
     onError: (error) => {
-      toast.error('Erro ao desconectar', { description: error.message })
+      toast.error('Erro ao desconectar', { description: extractErrorMessage(error) })
     },
   })
 }

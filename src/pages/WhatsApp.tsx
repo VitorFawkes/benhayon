@@ -293,7 +293,7 @@ export default function WhatsApp() {
         onCancel={(id) => {
           cancelMessage.mutate(id, {
             onSuccess: () => toast.success('Envio cancelado'),
-            onError: () => toast.error('Erro ao cancelar'),
+            onError: (e) => toast.error('Erro ao cancelar', { description: e.message }),
           })
         }}
         onDisableAI={(patientId, patientName) => {
@@ -301,26 +301,26 @@ export default function WhatsApp() {
             { patientId, enabled: false },
             {
               onSuccess: () => toast.success(`IA desativada para ${patientName}`),
-              onError: () => toast.error('Erro ao desativar IA'),
+              onError: (e) => toast.error('Erro ao desativar IA', { description: e.message }),
             }
           )
         }}
         onRetry={(id) => {
           retryMessage.mutate(id, {
             onSuccess: () => toast.success('Mensagem reenfileirada'),
-            onError: () => toast.error('Erro ao reenviar'),
+            onError: (e) => toast.error('Erro ao reenviar', { description: e.message }),
           })
         }}
         onEdit={(id, content) => {
           editMessageContent.mutate({ messageId: id, content }, {
             onSuccess: () => toast.success('Mensagem atualizada'),
-            onError: () => toast.error('Erro ao editar'),
+            onError: (e) => toast.error('Erro ao editar', { description: e.message }),
           })
         }}
         onSendNow={(id) => {
           sendNow.mutate(id, {
             onSuccess: () => toast.success('Envio antecipado'),
-            onError: () => toast.error('Erro ao antecipar envio'),
+            onError: (e) => toast.error('Erro ao antecipar envio', { description: e.message }),
           })
         }}
         onNavigatePatient={(patientId) => navigate(`/patients/${patientId}`)}

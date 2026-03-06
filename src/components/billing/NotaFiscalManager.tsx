@@ -203,8 +203,10 @@ export function NotaFiscalManager() {
       })
       toast.success('Nota fiscal removida')
       setDeleteTarget(null)
-    } catch {
-      toast.error('Erro ao remover nota fiscal')
+    } catch (error) {
+      toast.error('Erro ao remover nota fiscal', {
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+      })
     }
   }
 
