@@ -435,7 +435,6 @@ function MessageQueueSection({
               const statusCfg = STATUS_CONFIG[msg.status]
               const StatusIcon = statusCfg.icon
               const canCancel = msg.status === 'queued' || msg.status === 'sending'
-              const scheduledDate = new Date(msg.scheduled_for)
               const patientName = msg.patient?.full_name || 'Paciente'
 
               return (
