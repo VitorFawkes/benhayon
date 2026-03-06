@@ -362,21 +362,12 @@ export default function SendTestMessageDialog({
 
       const phone = patientPhone.replace('+', '')
 
-      // Ensure we have a valid session token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('Sessão expirada. Faça login novamente.')
-      }
-
       const { data: sendResult, error } = await supabase.functions.invoke('evolution-api', {
         body: {
           action: 'send_text',
           instanceName: instance.instance_name,
           number: phone,
           text: messageText,
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
         },
       })
 

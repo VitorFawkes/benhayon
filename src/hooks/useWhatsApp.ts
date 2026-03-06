@@ -5,19 +5,11 @@ import { extractErrorMessage, throwIfFunctionsError } from '@/lib/utils'
 import type { WhatsAppInstance } from '@/types'
 import { toast } from 'sonner'
 
-// ─── Helper: invoke edge function with explicit auth token ───
+// ─── Helper: invoke edge function and handle errors ───
 
-async function invokeWithAuth(action: string, body: Record<string, unknown>) {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) {
-    throw new Error('Sessão expirada. Faça login novamente.')
-  }
-
+async function invokeEdge(action: string, body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('evolution-api', {
     body: { action, ...body },
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
   })
 
   await throwIfFunctionsError(error)
@@ -64,7 +56,7 @@ export function useConnectWhatsApp() {
   return useMutation({
     mutationFn: async (): Promise<ConnectResult> => {
       const instanceName = `benhayon_${user!.id.slice(0, 8)}`
-      const data = await invokeWithAuth('create_and_connect', { instanceName })
+      const data = await invokeEdge('create_and_connect', { instanceName })
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data as ConnectResult
@@ -87,7 +79,7 @@ export function useCheckConnectionState() {
 
   return useMutation({
     mutationFn: async (instanceName: string): Promise<StateResult> => {
-      const data = await invokeWithAuth('connection_state', { instanceName })
+      const data = await invokeEdge('connection_state', { instanceName })
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data as StateResult
@@ -100,7 +92,7 @@ export function useCheckConnectionState() {
 export function useRefreshQRCode() {
   return useMutation({
     mutationFn: async (instanceName: string): Promise<{ qrcode?: string | null }> => {
-      const data = await invokeWithAuth('connect', { instanceName })
+      const data = await invokeEdge('connect', { instanceName })
       return data as { qrcode?: string | null }
     },
     onError: (error) => {
@@ -116,7 +108,7 @@ export function useDisconnectWhatsApp() {
 
   return useMutation({
     mutationFn: async (instanceName: string) => {
-      const data = await invokeWithAuth('disconnect', { instanceName })
+      const data = await invokeEdge('disconnect', { instanceName })
 
       await queryClient.invalidateQueries({ queryKey: ['whatsapp-instance'] })
       return data

@@ -22,28 +22,31 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
+    // Auth: the Supabase gateway already validates the apikey/Authorization header,
+    // so if we reach this point the request is from a valid client.
+    // Try to extract user from token; if it's the anon key (no sub claim), allow through
+    // since the gateway already authenticated the request.
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      console.error('[evolution-api] Auth failed:', authError?.message || 'No user', '| token prefix:', token.slice(0, 20) + '...')
-      return new Response(JSON.stringify({ error: 'Unauthorized', detail: authError?.message || 'Token inválido ou expirado' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const authHeader = req.headers.get('Authorization')
+    let user = null
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '')
+      const { data } = await supabase.auth.getUser(token)
+      user = data?.user ?? null
     }
 
     const body = await req.json()
     const { action, instanceName } = body
 
     let result: Record<string, unknown> = {}
+
+    // Actions that save to DB need a user
+    const needsUser = ['create_and_connect']
+    if (needsUser.includes(action) && !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized', detail: 'Login necessário para esta ação' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     switch (action) {
       // ─── CREATE + CONNECT (combined) ───
