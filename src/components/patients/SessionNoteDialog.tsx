@@ -15,7 +15,7 @@ import {
   Clock,
   Save,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, invokeEdgeFunction } from '@/lib/supabase'
 import {
   useSessionNote,
   useSessionNoteById,
@@ -311,8 +311,8 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
 
     setIsTranscribing(true)
     try {
-      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-        body: { audio_url: signedUrl },
+      const { data, error } = await invokeEdgeFunction('transcribe-audio', {
+        audio_url: signedUrl,
       })
 
       if (error) throw new Error(error instanceof Error ? error.message : String(error))

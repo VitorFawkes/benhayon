@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { MessageSquare, Send, Loader2, Info, Eye, Code2 } from 'lucide-react'
 import { cn, throwIfFunctionsError } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { supabase, invokeEdgeFunction } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAISettings } from '@/hooks/useAISettings'
 import { TEMPLATE_VARIABLES } from '@/constants'
@@ -362,13 +362,11 @@ export default function SendTestMessageDialog({
 
       const phone = patientPhone.replace('+', '')
 
-      const { data: sendResult, error } = await supabase.functions.invoke('evolution-api', {
-        body: {
-          action: 'send_text',
-          instanceName: instance.instance_name,
-          number: phone,
-          text: messageText,
-        },
+      const { data: sendResult, error } = await invokeEdgeFunction('evolution-api', {
+        action: 'send_text',
+        instanceName: instance.instance_name,
+        number: phone,
+        text: messageText,
       })
 
       await throwIfFunctionsError(error)
