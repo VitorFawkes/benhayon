@@ -77,7 +77,7 @@ export default function PatientSummary({ patientId, sessionValue, dateRange }: P
           // Invoiced months for this patient (to detect unbilled sessions)
           supabase
             .from('invoices')
-            .select('reference_month')
+            .select('reference_month, total_sessions')
             .eq('patient_id', patientId),
         ])
 
@@ -90,17 +90,26 @@ export default function PatientSummary({ patientId, sessionValue, dateRange }: P
       const invoices = invoicesRes.data ?? []
       const payments = paymentsRes.data ?? []
       const lastSession = lastSessionRes.data?.[0] ?? null
-      const invoicedMonths = new Set(
-        (invoicedMonthsRes.data ?? []).map((i: { reference_month: string }) => i.reference_month.slice(0, 7))
+      const invoiceByMonth = new Map(
+        (invoicedMonthsRes.data ?? []).map((i: { reference_month: string; total_sessions: number }) =>
+          [i.reference_month.slice(0, 7), i.total_sessions] as const
+        )
       )
 
-      // Count billable sessions (completed + cancelled) in months without invoice
+      // Count billable sessions per month and compare with invoiced count
       const billableStatuses = ['completed', 'cancelled']
-      const unbilledSessions = appointments.filter((a) => {
-        if (!billableStatuses.includes(a.status)) return false
-        const appointmentMonth = (a as Appointment).date.slice(0, 7)
-        return !invoicedMonths.has(appointmentMonth)
-      }).length
+      const billableByMonth = new Map<string, number>()
+      for (const a of appointments) {
+        if (!billableStatuses.includes(a.status)) continue
+        const month = (a as Appointment).date.slice(0, 7)
+        billableByMonth.set(month, (billableByMonth.get(month) ?? 0) + 1)
+      }
+
+      let unbilledSessions = 0
+      for (const [month, count] of billableByMonth) {
+        const invoiced = invoiceByMonth.get(month) ?? 0
+        unbilledSessions += Math.max(0, count - invoiced)
+      }
 
       return {
         completedThisMonth: appointments.filter((a) => a.status === 'completed').length,
@@ -164,9 +173,9 @@ export default function PatientSummary({ patientId, sessionValue, dateRange }: P
     },
     {
       icon: Clock,
-      label: 'Pendente',
+      label: 'Total pendente',
       value: formatCurrency(stats.pendingAmount),
-      subtitle: stats.unbilledSessions > 0 ? `${stats.unbilledSessions} sessão(ões) sem cobrança` : undefined,
+      subtitle: stats.unbilledSessions > 0 ? `${stats.unbilledSessions} sessão(ões) não cobrada(s)` : undefined,
       color: 'text-warning',
       bgColor: 'bg-warning-light',
     },

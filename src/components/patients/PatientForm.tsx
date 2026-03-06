@@ -35,7 +35,7 @@ const patientSchema = z.object({
   full_name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   phone: z
     .string()
-    .regex(/^\+55\d{10,11}$/, 'Telefone deve estar no formato +55XXXXXXXXXXX'),
+    .regex(/^\+55\d{11}$/, 'Telefone deve ser celular no formato +55XXXXXXXXXXX (11 dígitos)'),
   email: z.union([z.string().email('E-mail inválido'), z.literal('')]).optional(),
   session_value: z.coerce
     .number({ message: 'Informe um valor válido' })
@@ -45,7 +45,10 @@ const patientSchema = z.object({
   status: z.enum(['active', 'inactive', 'paused'] as const),
   notes: z.string().nullable().optional(),
   ai_enabled: z.boolean().default(true),
-})
+}).refine(
+  (data) => data.payment_type !== 'clinic' || (data.clinic_id && data.clinic_id.length > 0),
+  { message: 'Selecione uma clínica', path: ['clinic_id'] }
+)
 
 type PatientFormData = z.infer<typeof patientSchema>
 
@@ -344,6 +347,9 @@ export default function PatientForm({
                 )}
               />
 
+              {errors.clinic_id && (
+                <p className="text-xs text-destructive">{errors.clinic_id.message}</p>
+              )}
               {/* Inline create clinic */}
               {!showNewClinic ? (
                 <Button

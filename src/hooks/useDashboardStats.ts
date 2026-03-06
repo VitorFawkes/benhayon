@@ -60,8 +60,10 @@ export function useDashboardStats(range?: DateRange) {
           .lte('date', monthEnd),
       ])
 
-      const totalInvoiced = invoicesRes.data?.reduce((sum, inv) => sum + Number(inv.total_amount), 0) || 0
       const totalPaid = paymentsRes.data?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
+      const pendingAmount = (invoicesRes.data ?? [])
+        .filter(inv => ['pending', 'partial', 'overdue'].includes(inv.status))
+        .reduce((sum, inv) => sum + (Number(inv.total_amount) - Number(inv.amount_paid)), 0)
       const activePatients = patientsRes.count || 0
       const totalAppointments = appointmentsRes.count || 0
       const totalNoShows = noShowsRes.count || 0
@@ -69,7 +71,7 @@ export function useDashboardStats(range?: DateRange) {
 
       return {
         monthRevenue: totalPaid,
-        pendingAmount: totalInvoiced - totalPaid,
+        pendingAmount,
         activePatients,
         monthSessions: totalAppointments,
         noShowRate,
@@ -141,6 +143,8 @@ export function useDashboardDetails(metric: DashboardMetric | null, range?: Date
           .from('invoices')
           .select('total_amount, amount_paid, patient:patients(id, full_name)')
           .in('status', ['pending', 'partial', 'overdue'])
+          .gte('reference_month', monthStart)
+          .lte('reference_month', monthEnd)
         const byPatient = new Map<string, { id: string; name: string; total: number }>()
         for (const row of data || []) {
           const p = row.patient as unknown as { id: string; full_name: string } | null
@@ -223,7 +227,7 @@ export function useRevenueHistory() {
         const [invoicesRes, paymentsRes] = await Promise.all([
           supabase
             .from('invoices')
-            .select('total_amount')
+            .select('total_amount, amount_paid, status')
             .gte('reference_month', monthStart)
             .lte('reference_month', monthEnd),
           supabase
@@ -235,12 +239,15 @@ export function useRevenueHistory() {
 
         const invoiced = invoicesRes.data?.reduce((s, i) => s + Number(i.total_amount), 0) || 0
         const paid = paymentsRes.data?.reduce((s, p) => s + Number(p.amount), 0) || 0
+        const pending = (invoicesRes.data ?? [])
+          .filter(inv => ['pending', 'partial', 'overdue'].includes(inv.status))
+          .reduce((s, inv) => s + (Number(inv.total_amount) - Number(inv.amount_paid)), 0)
 
         months.push({
           month: format(date, 'MMM', { locale: ptBR }),
           invoiced,
           paid,
-          pending: invoiced - paid,
+          pending,
         })
       }
 

@@ -229,7 +229,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="p-6 text-center text-sm text-muted-foreground">
-                  Nenhum dado encontrado para este mês.
+                  Nenhum dado encontrado para o período selecionado.
                 </div>
               )}
             </div>
@@ -262,7 +262,7 @@ export default function Dashboard() {
               <BarChart data={revenueHistory} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#718096' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#718096' }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 12, fill: '#718096' }} tickFormatter={(v) => v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`} />
                 <Tooltip
                   formatter={(value) => formatCurrency(Number(value))}
                   contentStyle={{

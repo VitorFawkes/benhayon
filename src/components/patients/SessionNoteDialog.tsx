@@ -13,6 +13,7 @@ import {
   Link2,
   Calendar,
   Clock,
+  Save,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -413,19 +414,38 @@ export default function SessionNoteDialog({ open, onOpenChange, target }: Sessio
                 placeholder="Escreva suas anotações da sessão..."
                 className="w-full px-3 py-2 rounded-lg border border-input bg-surface text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-primary"
               />
-              {/* Save status */}
-              <div className="flex items-center gap-1.5 text-xs mt-1 h-4">
-                {upsertNote.isPending ? (
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Salvando...
-                  </span>
-                ) : note ? (
-                  <span className="text-success flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Salvo
-                  </span>
-                ) : null}
+              {/* Save button + status */}
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-1.5 text-xs h-4">
+                  {upsertNote.isPending ? (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Salvando...
+                    </span>
+                  ) : note || currentNoteId ? (
+                    <span className="text-success flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Salvo
+                    </span>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={upsertNote.isPending || (!content && !audioPath)}
+                  onClick={() => {
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+                    saveContent(content)
+                  }}
+                >
+                  {upsertNote.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Salvar
+                </Button>
               </div>
             </div>
 

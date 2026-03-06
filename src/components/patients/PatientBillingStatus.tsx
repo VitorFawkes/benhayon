@@ -47,7 +47,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
       <div className="bg-surface border border-border rounded-xl p-4 shadow-soft">
         <div className="flex items-center gap-2 text-muted-foreground">
           <FileText className="h-4 w-4" />
-          <span className="text-sm">Nenhuma cobranca gerada para este paciente.</span>
+          <span className="text-sm">Nenhuma cobrança gerada para este paciente.</span>
         </div>
       </div>
     )
@@ -66,10 +66,10 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
         patientId: invoice.patient_id,
         messageContent: lastBillingContent,
       })
-      toast.success('Cobranca enfileirada para reenvio.')
+      toast.success('Cobrança enfileirada para reenvio.')
       setConfirmOpen(false)
     } catch {
-      toast.error('Erro ao reenviar cobranca.')
+      toast.error('Erro ao reenviar cobrança.')
     }
   }
 
@@ -82,7 +82,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
     >
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground">
-          Ultima cobranca
+          Cobrança do mês
         </h3>
         <Badge className={cn('text-xs', INVOICE_STATUS_COLORS[invoice.status])}>
           {INVOICE_STATUS_LABELS[invoice.status]}
@@ -96,7 +96,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
             <FileText className="h-3.5 w-3.5 text-primary" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground">Referencia</p>
+            <p className="text-[10px] text-muted-foreground">Referência</p>
             <p className="text-xs font-medium text-foreground capitalize">
               {formatMonthYear(invoice.reference_month)}
             </p>
@@ -116,12 +116,12 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
             )}
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground">Cobranca</p>
+            <p className="text-[10px] text-muted-foreground">Cobrança</p>
             <p className={cn(
               'text-xs font-medium',
               isSent ? 'text-success' : 'text-warning'
             )}>
-              {isSent ? `Enviada ${formatDate(invoice.sent_at!)}` : 'Nao enviada'}
+              {isSent ? `Enviada ${formatDate(invoice.sent_at!)}` : 'Não enviada'}
             </p>
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
           <div>
             <p className="text-[10px] text-muted-foreground">Mensagens</p>
             <p className="text-xs font-medium text-foreground">
-              {billingMessagesSent} cobranca{billingMessagesSent !== 1 ? 's' : ''} · {reminderMessagesSent} lembrete{reminderMessagesSent !== 1 ? 's' : ''}
+              {billingMessagesSent} cobrança{billingMessagesSent !== 1 ? 's' : ''} · {reminderMessagesSent} lembrete{reminderMessagesSent !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
@@ -184,7 +184,7 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
             disabled={resend.isPending}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', resend.isPending && 'animate-spin')} />
-            Reenviar cobranca
+            Reenviar cobrança
           </Button>
         </div>
       )}
@@ -193,9 +193,9 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>Reenviar cobranca</DialogTitle>
+            <DialogTitle>Reenviar cobrança</DialogTitle>
             <DialogDescription>
-              A cobranca de{' '}
+              A cobrança de{' '}
               <span className="font-medium text-foreground">
                 {formatCurrency(invoice.total_amount)}
               </span>
@@ -203,14 +203,14 @@ export default function PatientBillingStatus({ patientId }: PatientBillingStatus
               <span className="font-medium text-foreground capitalize">
                 {formatMonthYear(invoice.reference_month)}
               </span>
-              {' '}sera reenviada via WhatsApp.
+              {' '}será reenviada via WhatsApp.
               {invoice.nota_fiscal_url ? (
                 <span className="block mt-2 text-success text-xs">
-                  A nota fiscal ({invoice.nota_fiscal_name}) sera enviada junto.
+                  A nota fiscal ({invoice.nota_fiscal_name}) será enviada junto.
                 </span>
               ) : (
                 <span className="block mt-2 text-warning text-xs">
-                  Nenhuma nota fiscal anexada. Somente o texto sera enviado.
+                  Nenhuma nota fiscal anexada. Somente o texto será enviado.
                 </span>
               )}
             </DialogDescription>

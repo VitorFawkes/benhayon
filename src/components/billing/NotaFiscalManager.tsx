@@ -452,7 +452,7 @@ export function NotaFiscalManager() {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{formatCurrency(invoice.total_amount)}</span>
                     <span>·</span>
-                    <span>{invoice.total_sessions} sessão{invoice.total_sessions !== 1 ? 'es' : ''}</span>
+                    <span>{invoice.total_sessions} {invoice.total_sessions !== 1 ? 'sessões' : 'sessão'}</span>
                     {invoice.patient?.phone && (
                       <>
                         <span>·</span>

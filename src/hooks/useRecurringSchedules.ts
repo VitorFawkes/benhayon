@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { addWeeks, addDays, format } from 'date-fns'
+import { addWeeks, addMonths, addDays, format } from 'date-fns'
 import type { RecurringSchedule, RecurringFrequency } from '@/types'
 
 // ─── Query Keys ───
@@ -31,10 +31,19 @@ function generateAppointmentDates(
     current = addDays(current, 1)
   }
 
-  const stepWeeks = frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4
-
   for (let i = 0; i < weeks; i++) {
-    const date = addWeeks(current, i * stepWeeks)
+    let date: Date
+    if (frequency === 'monthly') {
+      // Use calendar months to maintain same day-of-month
+      date = addMonths(current, i)
+      // Adjust to target day of week within the same week
+      while (date.getDay() !== targetDay) {
+        date = addDays(date, 1)
+      }
+    } else {
+      const stepWeeks = frequency === 'weekly' ? 1 : 2
+      date = addWeeks(current, i * stepWeeks)
+    }
     dates.push(date)
   }
 
@@ -82,7 +91,7 @@ export function useCreateRecurringSchedule() {
       if (scheduleError) throw scheduleError
 
       // 2. Gerar agendamentos para as próximas 8 semanas
-      const startsAt = new Date(input.starts_at)
+      const startsAt = new Date(input.starts_at + 'T00:00:00')
       const dates = generateAppointmentDates(
         input.day_of_week,
         input.frequency,
@@ -92,7 +101,7 @@ export function useCreateRecurringSchedule() {
 
       // Filtrar datas que estejam dentro do período (se ends_at definido)
       const validDates = input.ends_at
-        ? dates.filter((d) => d <= new Date(input.ends_at!))
+        ? dates.filter((d) => d <= new Date(input.ends_at! + 'T23:59:59'))
         : dates
 
       if (validDates.length > 0) {

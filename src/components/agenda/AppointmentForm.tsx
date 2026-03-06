@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format, addMinutes, addWeeks, addDays, parse } from 'date-fns'
+import { format, addMinutes, addWeeks, addMonths, addDays, parse } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 
@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { supabase } from '@/lib/supabase'
 import { usePatients } from '@/hooks/usePatients'
 import { useCreateAppointment, useUpdateAppointment, useDeleteAppointment } from '@/hooks/useAppointments'
 import { useCreateRecurringSchedule } from '@/hooks/useRecurringSchedules'
@@ -75,6 +76,7 @@ export function AppointmentForm({
 }: AppointmentFormProps) {
   const isEdit = !!appointment
   const [patientSearch, setPatientSearch] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [isRecurring, setIsRecurring] = useState(false)
   const [frequency, setFrequency] = useState<RecurringFrequency>('weekly')
   const [dayOfWeek, setDayOfWeek] = useState(1)
@@ -180,8 +182,6 @@ export function AppointmentForm({
   const preview = useMemo(() => {
     if (!isRecurring || !startsAt) return null
 
-    const stepWeeks = frequency === 'weekly' ? 1 : frequency === 'biweekly' ? 2 : 4
-
     let current = new Date(startsAt + 'T00:00:00')
     while (current.getDay() !== dayOfWeek) {
       current = addDays(current, 1)
@@ -192,7 +192,16 @@ export function AppointmentForm({
     let lastDate = current
 
     for (let i = 0; i < totalWeeks; i++) {
-      const date = addWeeks(current, i * stepWeeks)
+      let date: Date
+      if (frequency === 'monthly') {
+        date = addMonths(current, i)
+        while (date.getDay() !== dayOfWeek) {
+          date = addDays(date, 1)
+        }
+      } else {
+        const stepWeeks = frequency === 'weekly' ? 1 : 2
+        date = addWeeks(current, i * stepWeeks)
+      }
       if (endsAt && date > new Date(endsAt + 'T23:59:59')) break
       count++
       lastDate = date
@@ -204,8 +213,53 @@ export function AppointmentForm({
     }
   }, [isRecurring, frequency, startsAt, endsAt, dayOfWeek])
 
+  async function checkConflicts(date: string, startTime: string, endTime: string): Promise<string[]> {
+    const { data: existing } = await supabase
+      .from('appointments')
+      .select('start_time, end_time, patient:patients(full_name)')
+      .eq('date', date)
+      .neq('status', 'cancelled')
+      .lt('start_time', endTime)
+      .gt('end_time', startTime)
+
+    if (!existing?.length) return []
+
+    // Filter out the current appointment when editing
+    const conflicts = isEdit
+      ? existing.filter(() => {
+          // We can't filter by id in the query above since we don't select id,
+          // but we're checking the same date/time so if times match exactly it's the same appointment
+          return true
+        })
+      : existing
+
+    return conflicts.map((c) => {
+      const name = (c.patient as unknown as { full_name: string })?.full_name ?? 'Paciente'
+      return `${name} (${c.start_time.slice(0, 5)}–${c.end_time.slice(0, 5)})`
+    })
+  }
+
   async function onSubmit(data: AppointmentFormData) {
     try {
+      // Check for time conflicts (skip for recurring)
+      if (!isRecurring) {
+        const conflicts = await checkConflicts(data.date, data.start_time, data.end_time)
+        // When editing, filter out conflict with self
+        const realConflicts = isEdit
+          ? conflicts.filter((c) => {
+              const selfTime = `${appointment!.patient?.full_name ?? 'Paciente'} (${appointment!.start_time.slice(0, 5)}–${appointment!.end_time.slice(0, 5)})`
+              return c !== selfTime
+            })
+          : conflicts
+
+        if (realConflicts.length > 0) {
+          const confirmed = window.confirm(
+            `Conflito de horário detectado!\n\nJá existe agendamento nesse horário:\n${realConflicts.join('\n')}\n\nDeseja continuar mesmo assim?`
+          )
+          if (!confirmed) return
+        }
+      }
+
       if (isEdit) {
         await updateMutation.mutateAsync({
           id: appointment!.id,
@@ -470,15 +524,33 @@ export function AppointmentForm({
           </div>
 
           <DialogFooter className="gap-2">
-            {isEdit && (
+            {isEdit && !confirmDelete && (
               <Button
                 type="button"
                 variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
+                onClick={() => setConfirmDelete(true)}
               >
                 Excluir
               </Button>
+            )}
+            {isEdit && confirmDelete && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                >
+                  Confirmar exclusão
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Voltar
+                </Button>
+              </div>
             )}
             <Button
               type="button"

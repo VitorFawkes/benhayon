@@ -227,6 +227,7 @@ export function useUpdateInvoice() {
   return useMutation({
     mutationFn: async ({
       id,
+      patient: _patient,
       ...input
     }: Partial<Invoice> & { id: string }) => {
       const { data, error } = await supabase
@@ -259,16 +260,31 @@ export function usePatientBillingStatus(patientId: string | undefined) {
   return useQuery({
     queryKey: ['patient-billing-status', patientId],
     queryFn: async (): Promise<PatientBillingStatusData> => {
-      // Última fatura do paciente
-      const { data: invoice, error: invError } = await supabase
+      // Tenta buscar a fatura do mês atual primeiro
+      const currentMonth = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+      const { data: currentInvoice, error: curError } = await supabase
         .from('invoices')
         .select('*, patient:patients(*)')
         .eq('patient_id', patientId!)
-        .order('reference_month', { ascending: false })
-        .limit(1)
+        .eq('reference_month', currentMonth)
         .maybeSingle()
 
-      if (invError) throw invError
+      if (curError) throw curError
+
+      // Se não há fatura do mês atual, busca a mais recente
+      let invoice = currentInvoice
+      if (!invoice) {
+        const { data: latestInvoice, error: invError } = await supabase
+          .from('invoices')
+          .select('*, patient:patients(*)')
+          .eq('patient_id', patientId!)
+          .order('reference_month', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (invError) throw invError
+        invoice = latestInvoice
+      }
 
       if (!invoice) {
         return { invoice: null, billingMessagesSent: 0, reminderMessagesSent: 0, lastBillingContent: null }

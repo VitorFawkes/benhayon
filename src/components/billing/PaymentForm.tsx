@@ -106,10 +106,14 @@ export function PaymentForm({
     }
   }, [selectedInvoiceId, patientInvoices, setValue])
 
-  // Reset invoice when patient changes
+  // Auto-select first pending invoice when patient changes
   useEffect(() => {
-    setValue('invoice_id', null)
-  }, [selectedPatientId, setValue])
+    if (patientInvoices.length > 0) {
+      setValue('invoice_id', patientInvoices[0].id)
+    } else {
+      setValue('invoice_id', null)
+    }
+  }, [selectedPatientId, patientInvoices, setValue])
 
   async function onSubmit(values: PaymentFormValues) {
     try {
@@ -200,7 +204,7 @@ export function PaymentForm({
           {/* Cobrança (opcional) */}
           {selectedPatientId && (
             <div className="space-y-1.5">
-              <Label htmlFor="invoice">Cobrança {patientInvoices.length > 0 ? '' : '(opcional)'}</Label>
+              <Label htmlFor="invoice">Referente a</Label>
               <Controller
                 control={control}
                 name="invoice_id"
@@ -215,7 +219,7 @@ export function PaymentForm({
                       <SelectValue placeholder="Vincular a uma cobrança" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Sem vínculo</SelectItem>
+                      <SelectItem value="none">Avulso (sem cobrança mensal)</SelectItem>
                       {patientInvoices.map((inv) => (
                         <SelectItem key={inv.id} value={inv.id}>
                           <span className="capitalize">
@@ -231,7 +235,7 @@ export function PaymentForm({
               />
               {patientInvoices.length > 0 && !selectedInvoiceId && (
                 <p className="text-xs text-warning">
-                  Este paciente tem {patientInvoices.length} cobrança(s) pendente(s). Considere vincular o pagamento.
+                  Este paciente tem {patientInvoices.length} cobrança(s) pendente(s).
                 </p>
               )}
             </div>

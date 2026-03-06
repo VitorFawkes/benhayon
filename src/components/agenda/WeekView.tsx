@@ -35,8 +35,8 @@ export function WeekView({
   appointments,
   onSlotClick,
   onAppointmentClick,
-  onNoteClick: _onNoteClick,
-  noteAppointmentIds: _noteAppointmentIds,
+  onNoteClick,
+  noteAppointmentIds,
 }: WeekViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(new Date())
@@ -187,6 +187,8 @@ export function WeekView({
                       <AppointmentCard
                         appointment={appointment}
                         onClick={() => onAppointmentClick(appointment)}
+                        onNoteClick={onNoteClick ? () => onNoteClick(appointment) : undefined}
+                        hasNote={noteAppointmentIds?.has(appointment.id)}
                         compact
                       />
                     </div>
@@ -196,14 +198,14 @@ export function WeekView({
             )
           })}
 
-          {/* Current time indicator */}
+          {/* Current time indicator — scoped to today's column */}
           {currentTimePosition !== null && todayColumnIndex >= 0 && (
             <div
               className="absolute z-20 pointer-events-none flex items-center"
               style={{
                 top: `${currentTimePosition}px`,
-                left: '3.5rem',
-                right: 0,
+                left: `calc(3.5rem + ${todayColumnIndex} * ((100% - 3.5rem) / 7))`,
+                width: `calc((100% - 3.5rem) / 7)`,
               }}
             >
               <div className="w-2 h-2 rounded-full bg-destructive -ml-1" />

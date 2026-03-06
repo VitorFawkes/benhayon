@@ -36,7 +36,7 @@ import { useMessageLogs } from '@/hooks/useMessageLogs'
 import { useMessageQueue, useCancelMessage, useTogglePatientAI, useRetryMessage, useEditMessageContent, useSendNow } from '@/hooks/useMessageQueue'
 import MessageItem from '@/components/messages/MessageItem'
 import MediaViewer from '@/components/messages/MediaViewer'
-import { formatPhone } from '@/lib/formatters'
+import { formatPhone, formatCurrency, formatDateTime, formatMonthYear } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import type { MessageQueueItem, OutboundMessageType, QueueStatus } from '@/types'
 
@@ -122,17 +122,11 @@ export default function WhatsApp() {
         setQrCode(result.qrcode)
       }
 
-      // Start polling for connection state
-      const instanceName = instance?.instance_name || `benhayon_${(await refetch()).data?.instance_name}`
+      // Refetch to get the instance from DB and start polling
+      const refreshed = await refetch()
+      const instanceName = refreshed.data?.instance_name || instance?.instance_name
       if (instanceName) {
         startPolling(instanceName)
-      }
-      // Refetch to get the instance from DB
-      await refetch()
-      // If we have the instance name now, start polling
-      const refreshed = await refetch()
-      if (refreshed.data?.instance_name) {
-        startPolling(refreshed.data.instance_name)
       }
     } catch {
       // Error handled by mutation onError
@@ -468,7 +462,7 @@ function MessageQueueSection({
                     </span>
 
                     <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
-                      {scheduledDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {formatDateTime(msg.scheduled_for)}
                     </span>
 
                     {isExpanded ? <ChevronUp size={16} className="text-muted-foreground shrink-0" /> : <ChevronDown size={16} className="text-muted-foreground shrink-0" />}
@@ -499,14 +493,14 @@ function MessageQueueSection({
                             </div>
                             <div>
                               <span className="text-muted-foreground">Agendado: </span>
-                              <span className="text-foreground">{scheduledDate.toLocaleString('pt-BR')}</span>
+                              <span className="text-foreground">{formatDateTime(msg.scheduled_for)}</span>
                             </div>
                             {msg.invoice && (
                               <div>
                                 <span className="text-muted-foreground">Fatura: </span>
-                                <span className="text-foreground">
-                                  {new Date(msg.invoice.reference_month).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                                  {' — R$ '}{msg.invoice.total_amount.toFixed(2)}
+                                <span className="text-foreground capitalize">
+                                  {formatMonthYear(msg.invoice.reference_month + 'T12:00:00')}
+                                  {' — '}{formatCurrency(msg.invoice.total_amount)}
                                 </span>
                               </div>
                             )}
@@ -542,10 +536,12 @@ function MessageQueueSection({
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => {
+                                    if (!editContent.trim()) return
                                     onEdit(msg.id, editContent)
                                     setEditingId(null)
                                   }}
-                                  className="h-8 px-3 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5"
+                                  disabled={!editContent.trim()}
+                                  className="h-8 px-3 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                                 >
                                   <Check size={14} />
                                   Salvar

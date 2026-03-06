@@ -271,7 +271,7 @@ export function GenerateInvoices({ open, onOpenChange }: GenerateInvoicesProps) 
                   >
                     <span className="text-foreground">{item.patient_name}</span>
                     <span className="text-muted-foreground">
-                      {item.sessions_count} sessão{item.sessions_count > 1 ? 'ões' : ''} &middot;{' '}
+                      {item.sessions_count} {item.sessions_count > 1 ? 'sessões' : 'sessão'} &middot;{' '}
                       {formatCurrency(item.total_amount)}
                     </span>
                   </div>

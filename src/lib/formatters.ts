@@ -27,7 +27,11 @@ function toSaoPaulo(date: Date): Date {
 export function formatDate(date: string | Date, pattern = 'dd/MM/yyyy'): string {
   const parsed = typeof date === 'string' ? parseISO(date) : date
   if (!isValid(parsed)) return '—'
-  return format(toSaoPaulo(parsed), pattern, { locale: ptBR })
+  // Date-only strings (yyyy-MM-dd) are parsed as local midnight by parseISO.
+  // Only apply timezone conversion for datetime strings (contain 'T' or 'Z').
+  const isDateOnly = typeof date === 'string' && !date.includes('T') && !date.includes('Z')
+  const adjusted = isDateOnly ? parsed : toSaoPaulo(parsed)
+  return format(adjusted, pattern, { locale: ptBR })
 }
 
 export function formatDateTime(date: string | Date): string {

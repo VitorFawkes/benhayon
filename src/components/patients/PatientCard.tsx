@@ -57,7 +57,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const { data: stats } = useQuery({
-    queryKey: ['patient-card-stats', patient.id, monthStart],
+    queryKey: ['patient-card-stats', patient.id, monthStart, today],
     queryFn: async () => {
       const [
         nextApt,
@@ -254,7 +254,7 @@ export default function PatientCard({ patient, index, referenceMonth }: PatientC
                       'text-[9px] mt-0.5',
                       stats.invoiceSentAt ? 'text-success' : 'text-destructive'
                     )}>
-                      {stats.invoiceSentAt ? 'Enviada' : 'Nao enviada'}
+                      {stats.invoiceSentAt ? 'Enviada' : 'Não enviada'}
                     </p>
                     <p className={cn(
                       'text-[9px]',

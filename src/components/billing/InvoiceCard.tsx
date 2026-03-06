@@ -53,11 +53,14 @@ export function InvoiceCard({
     }
   }
 
+  const [confirmDeleteNF, setConfirmDeleteNF] = useState(false)
+
   const handleDelete = async () => {
     if (!invoice.nota_fiscal_url) return
     try {
       await deleteNF.mutateAsync({ invoiceId: invoice.id, url: invoice.nota_fiscal_url })
       toast.success('Nota fiscal removida')
+      setConfirmDeleteNF(false)
     } catch {
       toast.error('Erro ao remover nota fiscal')
     }
@@ -248,16 +251,37 @@ export function InvoiceCard({
                       >
                         {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={handleDelete}
-                        disabled={deleteNF.isPending}
-                        title="Remover"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {confirmDeleteNF ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                            onClick={handleDelete}
+                            disabled={deleteNF.isPending}
+                          >
+                            Confirmar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setConfirmDeleteNF(false)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => setConfirmDeleteNF(true)}
+                          title="Remover"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <Button
