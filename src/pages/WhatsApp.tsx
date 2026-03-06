@@ -376,11 +376,11 @@ const MESSAGE_TYPE_LABELS: Record<OutboundMessageType, string> = {
 }
 
 const STATUS_CONFIG: Record<QueueStatus, { label: string; icon: typeof Clock; className: string }> = {
-  queued: { label: 'Na fila', icon: Clock, className: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950' },
-  sending: { label: 'Enviando', icon: Loader2, className: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950' },
-  sent: { label: 'Enviado', icon: CheckCircle2, className: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950' },
-  failed: { label: 'Falhou', icon: AlertTriangle, className: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950' },
-  cancelled: { label: 'Cancelado', icon: XCircle, className: 'text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-900' },
+  queued: { label: 'Na fila', icon: Clock, className: 'text-primary bg-primary-light' },
+  sending: { label: 'Enviando', icon: Loader2, className: 'text-accent-dark bg-accent-light' },
+  sent: { label: 'Enviado', icon: CheckCircle2, className: 'text-success bg-success-light' },
+  failed: { label: 'Falhou', icon: AlertTriangle, className: 'text-destructive bg-destructive-light' },
+  cancelled: { label: 'Cancelado', icon: XCircle, className: 'text-muted-foreground bg-muted' },
 }
 
 function MessageQueueSection({
